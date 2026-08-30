@@ -85,6 +85,8 @@
   label.flabel{ font-size:11.5px; font-weight:700; color:var(--ink-soft); display:block; margin:10px 0 4px; }
 
   .stampwrap{ position:relative; }
+  .feedback-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:6px; }
+  .feedback-grid .flabel{ margin:0 0 4px; }
   .stamp{
     position:absolute; top:-6px; right:6px; width:78px; height:78px; border-radius:50%;
     border:2.5px dashed var(--green); color:var(--green); display:flex; align-items:center; justify-content:center;
@@ -620,17 +622,15 @@ function weekView(){
         ${savingRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">변동 저축 카테고리가 없어요</td></tr>'}
       </table>
     </div>
-    <div class="card stampwrap">
+    <div class="card stampwrap full">
       ${stamped?'<div class="stamp">정산<br>완료</div>':''}
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">주간 피드백</h3>
-      <label class="flabel">총평</label>
-      <textarea class="feedback" id="fb-total" placeholder="이번 주 지출 총평을 적어보세요">${fb.total}</textarea>
-      <label class="flabel">베스트</label>
-      <textarea class="feedback" id="fb-best" placeholder="잘한 소비">${fb.best}</textarea>
-      <label class="flabel">워스트</label>
-      <textarea class="feedback" id="fb-worst" placeholder="아쉬운 소비">${fb.worst}</textarea>
-      <label class="flabel">다음주 반영사항</label>
-      <textarea class="feedback" id="fb-next" placeholder="다음주에 적용할 것">${fb.next}</textarea>
+      <div class="feedback-grid">
+        <div><label class="flabel">총평</label><textarea class="feedback" id="fb-total" placeholder="이번 주 지출 총평을 적어보세요">${fb.total}</textarea></div>
+        <div><label class="flabel">베스트</label><textarea class="feedback" id="fb-best" placeholder="잘한 소비">${fb.best}</textarea></div>
+        <div><label class="flabel">워스트</label><textarea class="feedback" id="fb-worst" placeholder="아쉬운 소비">${fb.worst}</textarea></div>
+        <div><label class="flabel">다음주 반영사항</label><textarea class="feedback" id="fb-next" placeholder="다음주에 적용할 것">${fb.next}</textarea></div>
+      </div>
     </div>
     </div>
   `;
@@ -1147,17 +1147,15 @@ function monthView(){
         ${rowsFor(variableCats) || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">기록 없음</td></tr>'}
       </table>
     </div>
-    <div class="card stampwrap">
+    <div class="card stampwrap full">
       ${mStamped?'<div class="stamp">월정산<br>완료</div>':''}
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">월말 피드백</h3>
-      <label class="flabel">총평</label>
-      <textarea class="feedback" id="mfb-total" placeholder="이번 달 총평을 적어보세요">${mfb.total}</textarea>
-      <label class="flabel">베스트</label>
-      <textarea class="feedback" id="mfb-best" placeholder="잘한 소비/저축">${mfb.best}</textarea>
-      <label class="flabel">워스트</label>
-      <textarea class="feedback" id="mfb-worst" placeholder="아쉬운 지점">${mfb.worst}</textarea>
-      <label class="flabel">다음달 반영사항</label>
-      <textarea class="feedback" id="mfb-next" placeholder="다음달 예산에 반영할 것">${mfb.next}</textarea>
+      <div class="feedback-grid">
+        <div><label class="flabel">총평</label><textarea class="feedback" id="mfb-total" placeholder="이번 달 총평을 적어보세요">${mfb.total}</textarea></div>
+        <div><label class="flabel">베스트</label><textarea class="feedback" id="mfb-best" placeholder="잘한 소비/저축">${mfb.best}</textarea></div>
+        <div><label class="flabel">워스트</label><textarea class="feedback" id="mfb-worst" placeholder="아쉬운 지점">${mfb.worst}</textarea></div>
+        <div><label class="flabel">다음달 반영사항</label><textarea class="feedback" id="mfb-next" placeholder="다음달 예산에 반영할 것">${mfb.next}</textarea></div>
+      </div>
     </div>
     </div>
   `;
