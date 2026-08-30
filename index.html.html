@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>머니저널</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --paper:#FAF5EC;
+    --paper-card:#FFFFFF;
+    --ink:#2E2A3D;
+    --ink-soft:#948FA3;
+    --line:#F0E4E6;
+    --brand:#FF6F91;
+    --brand-soft:#FFE7EE;
+    --green:#14B8A6;
+    --green-soft:#DEFBF6;
+    --rust:#FF6B6B;
+    --rust-soft:#FFE9E9;
+    --gold:#FFA726;
+    --gold-soft:#FFF2DC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Noto Sans KR', -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  h1,h2,h3,.serif{ font-family:'Noto Serif KR', serif; }
+  #app{ max-width:1400px; margin:0 auto; padding:16px 20px 60px; }
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;
+    background:linear-gradient(120deg, var(--brand), #FFA9C0 65%, var(--gold));
+    padding:16px 20px; border-radius:14px;
+  }
+  header.top h1{ font-size:21px; margin:0; letter-spacing:.02em; color:#fff; }
+  header.top .sub{ font-size:11px; color:rgba(255,255,255,.88); }
+  header.top .sync-badge{ color:rgba(255,255,255,.92); }
+  header.top .sync-badge .dot{ background:#fff; }
+  nav.tabs{ display:flex; gap:6px; overflow-x:auto; border-bottom:1px solid var(--line); margin-bottom:16px; padding-bottom:0; }
+  nav.tabs button{
+    background:none; border:none; padding:9px 12px; font-size:13px; color:var(--ink-soft);
+    cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; font-family:inherit;
+  }
+  nav.tabs button.active{ color:var(--ink); border-bottom-color:var(--green); font-weight:700; }
+
+  .card{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:12px; }
+  .weekbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .weekbar button{ background:none; border:1px solid var(--line); border-radius:6px; width:32px; height:32px; font-size:15px; cursor:pointer; }
+  .weeklabel{ text-align:center; }
+  .weeklabel .range{ font-size:14px; font-weight:700; }
+  .weeklabel .wk{ font-size:11px; color:var(--ink-soft); }
+
+  .daysrow{ display:grid; grid-template-columns:repeat(7,minmax(120px,1fr)); gap:8px; overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch; }
+  .daycard{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:8px; }
+  .daycard.today{ border-color:var(--green); }
+  .daycard .dhead{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .daycard .dname{ font-size:12px; font-weight:700; }
+  .daycard .ddate{ font-size:10px; color:var(--ink-soft); }
+  .entry{ border-bottom:1px dashed var(--line); padding:4px 0; font-size:11.5px; position:relative; }
+  .entry .cat{ display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:10px; background:var(--green-soft); color:var(--green); margin-bottom:2px; }
+  .entry .cat.income{ background:var(--gold-soft); color:var(--gold); }
+  .entry .amt{ font-weight:700; }
+  .entry .del{ position:absolute; right:0; top:2px; color:var(--ink-soft); cursor:pointer; font-size:10px; border:none; background:none; }
+  .addbtn{ width:100%; margin-top:6px; padding:5px; font-size:11px; border:1px dashed var(--line); background:none; border-radius:6px; color:var(--ink-soft); cursor:pointer; }
+  .daytotal{ margin-top:6px; font-size:11px; text-align:right; color:var(--ink-soft); }
+
+  table.budget{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.budget th{ text-align:left; font-weight:500; color:var(--ink-soft); font-size:11px; border-bottom:1px solid var(--line); padding:5px 4px; }
+  table.budget td{ padding:6px 4px; border-bottom:1px solid var(--line); }
+  table.budget td.num{ text-align:right; }
+  .diff-over{ color:var(--rust); font-weight:700; }
+  .diff-under{ color:var(--green); font-weight:700; }
+  .bar-bg{ background:var(--line); border-radius:4px; height:6px; overflow:hidden; margin-top:3px; }
+  .bar-fill{ height:100%; background:var(--green); }
+  .bar-fill.over{ background:var(--rust); }
+
+  textarea.feedback{ width:100%; font-family:inherit; font-size:12.5px; border:1px solid var(--line); border-radius:6px; padding:8px; resize:vertical; min-height:50px; background:#fff; }
+  label.flabel{ font-size:11.5px; font-weight:700; color:var(--ink-soft); display:block; margin:10px 0 4px; }
+
+  .stampwrap{ position:relative; }
+  .stamp{
+    position:absolute; top:-6px; right:6px; width:78px; height:78px; border-radius:50%;
+    border:2.5px dashed var(--green); color:var(--green); display:flex; align-items:center; justify-content:center;
+    text-align:center; font-family:'Noto Serif KR',serif; font-weight:700; font-size:11px; line-height:1.25;
+    transform:rotate(-14deg); opacity:.88; pointer-events:none;
+  }
+
+  .modal-bg{ position:fixed; inset:0; background:rgba(35,35,35,.4); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
+  .modal{ background:var(--paper-card); width:100%; max-width:760px; border-radius:14px 14px 0 0; padding:18px 16px 24px; }
+  .modal h3{ margin:0 0 10px; font-size:15px; }
+  .modal .row{ display:flex; gap:8px; margin-bottom:8px; }
+  .modal select, .modal input{ width:100%; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:6px; font-family:inherit; background:#fff; }
+  .modal .actions{ display:flex; gap:8px; margin-top:10px; }
+  .modal button.primary{ flex:1; background:var(--green); color:#fff; border:none; border-radius:6px; padding:10px; font-size:13.5px; font-weight:700; cursor:pointer; }
+  .modal button.cancel{ background:none; border:1px solid var(--line); border-radius:6px; padding:10px 14px; cursor:pointer; font-size:13px; }
+
+  .summary-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .summary-grid .box{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:10px 8px; text-align:center; }
+  .summary-grid .box .lbl{ font-size:10.5px; color:var(--ink-soft); }
+  .summary-grid .box .val{ font-size:15px; font-weight:700; margin-top:2px; }
+
+  .monthnav{ display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:14px; }
+  .monthnav button{ background:none; border:1px solid var(--line); border-radius:6px; width:32px; height:32px; cursor:pointer; }
+  .monthnav .m{ font-size:16px; font-weight:700; font-family:'Noto Serif KR',serif; }
+
+  .catlist{ display:flex; flex-direction:column; gap:6px; }
+  .catrow{ display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:6px; padding:7px 8px; font-size:12.5px; background:#fff; }
+  .catrow .tag{ font-size:9.5px; padding:1px 6px; border-radius:10px; background:var(--green-soft); color:var(--green); flex-shrink:0; }
+  .catrow .tag.income{ background:var(--gold-soft); color:var(--gold); }
+  .catrow .tag.saving{ background:#EDE9FE; color:#8B5CF6; }
+  .catrow .tag.fixed{ background:#EDE9FE; color:#8B5CF6; }
+  .catrow .tag.variable{ background:var(--green-soft); color:var(--green); }
+  .subtotal-row td{ font-weight:700; background:#FBF8F1; }
+  .grouplabel{ font-size:11px; font-weight:700; color:var(--ink-soft); margin:10px 0 2px; }
+  .catrow .nm{ flex:1; }
+  .catrow input{ width:64px; border:1px solid var(--line); border-radius:4px; padding:4px 5px; font-size:11.5px; font-family:inherit; text-align:right; }
+  .catrow .rm{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; }
+
+  .searchbox{ display:flex; gap:6px; margin-bottom:10px; }
+  .searchbox input, .searchbox select{ padding:8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; font-family:inherit; }
+  .searchbox input{ flex:1; }
+  .result-item{ display:flex; justify-content:space-between; border-bottom:1px solid var(--line); padding:8px 2px; font-size:12.5px; }
+  .result-item .dt{ color:var(--ink-soft); font-size:11px; }
+
+  .rtabbtn{ background:var(--paper-card); border:1px solid var(--line); border-radius:6px; padding:7px 11px; font-size:12px; cursor:pointer; font-family:inherit; color:var(--ink-soft); }
+  .rtabbtn.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:700; }
+  .narrow-view{ margin:0 auto; }
+  .card-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; align-items:start; }
+  .card-grid .full{ grid-column:1/-1; }
+  textarea.autogrow{ resize:none; overflow:hidden; font-family:inherit; border:1px solid var(--line); border-radius:3px; padding:2px 4px; line-height:1.35; }
+  .scrolltable{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .scrolltable table{ min-width:640px; }
+  .scrolltable input{ width:56px; font-size:11px; padding:2px 3px; text-align:right; border:1px solid var(--line); border-radius:3px; font-family:inherit; }
+  .yearcard{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:10px; }
+  .yearcard .yhead{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .yearcard .yhead .yr{ font-family:'Noto Serif KR',serif; font-weight:700; font-size:15px; }
+  .yfield{ display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .yfield label{ width:88px; color:var(--ink-soft); flex-shrink:0; }
+  .yfield input, .yfield textarea{ flex:1; padding:6px; font-size:12px; border:1px solid var(--line); border-radius:5px; font-family:inherit; }
+  .yfield .computed{ flex:1; font-weight:700; font-family:'Noto Serif KR',serif; }
+  .yearcard .rm-year{ background:none; border:1px solid var(--line); border-radius:5px; padding:4px 8px; font-size:11px; cursor:pointer; color:var(--rust); }
+  .itemrow-head{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .itemrow-head input{ flex:1; padding:6px; font-size:12.5px; border:1px solid var(--line); border-radius:5px; font-family:inherit; }
+
+  /* asset view */
+  .asset-group-head{ font-size:12px; font-weight:700; margin:10px 0 4px; color:var(--ink-soft); }
+  .asset-row{ display:flex; align-items:center; gap:6px; font-size:12px; border-bottom:1px solid var(--line); padding:6px 2px; }
+  .asset-row .nm{ flex:1; }
+  .asset-row input{ width:100px; text-align:right; border:1px solid var(--line); border-radius:4px; padding:4px 6px; font-family:inherit; font-size:12px; }
+  .asset-row .diff{ width:78px; text-align:right; font-weight:700; font-size:11.5px; }
+  .asset-subtotal{ display:flex; justify-content:space-between; font-size:12px; font-weight:700; padding:6px 2px; background:#FBF8F1; }
+
+  /* project calendar */
+  .calhead{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:4px; }
+  .calgrid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .calday{ background:var(--paper-card); border:1px solid var(--line); border-radius:5px; min-height:56px; padding:3px; font-size:9px; }
+  .calday.blank{ background:none; border:none; }
+  .calday .dnum{ font-size:9.5px; color:var(--ink-soft); text-align:right; }
+  .projchip{ background:var(--green-soft); color:var(--green); border-radius:4px; padding:1px 3px; margin-top:2px; font-size:8.5px; line-height:1.2; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .projchip.received{ background:var(--green); color:#fff; }
+  .weeksub{ font-size:10.5px; color:var(--ink-soft); text-align:right; padding:2px 4px; grid-column: span 7; }
+  .projrow{ display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:6px; background:#fff; font-size:12px; }
+  .projrow input{ border:1px solid var(--line); border-radius:4px; padding:5px; font-family:inherit; font-size:11.5px; }
+  .empty{ text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:13px; }
+  .addcat-form{ display:flex; gap:6px; margin-top:10px; }
+  .addcat-form select, .addcat-form input{ font-family:inherit; padding:7px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; }
+  .addcat-form button{ background:var(--ink); color:#fff; border:none; border-radius:6px; padding:7px 12px; font-size:12.5px; cursor:pointer; }
+  .loading{ text-align:center; padding:60px 0; color:var(--ink-soft); }
+  .login-wrap{ max-width:360px; margin:60px auto; text-align:center; }
+  .login-wrap input{ width:100%; padding:11px; margin-bottom:8px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:13px; box-sizing:border-box; }
+  .login-wrap button{ width:100%; padding:11px; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; margin-bottom:8px; }
+  .login-wrap .primary{ background:var(--green); color:#fff; }
+  .login-wrap .secondary{ background:none; border:1px solid var(--line); color:var(--ink-soft); }
+  .login-wrap .err{ color:var(--rust); font-size:11.5px; margin-bottom:8px; min-height:14px; }
+  .sync-badge{ font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; }
+  .sync-badge .dot{ width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">불러오는 중…</div></div>
+
+<script>
+const STORAGE_KEY = 'gagyebu-v1';
+
+// ---- Firebase (optional cloud sync) ----
+// 1) Firebase 콘솔(console.firebase.google.com)에서 무료 프로젝트를 만들고
+// 2) Authentication > Sign-in method 에서 이메일/비밀번호를 켜고
+// 3) Realtime Database를 만든 뒤
+// 4) 웹앱 등록에서 나오는 설정값을 아래에 그대로 붙여넣으세요.
+// apiKey를 채우지 않으면 이 기능은 자동으로 꺼지고, 지금처럼 기기별 저장만 사용됩니다.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAcCidu_JD05SGBWYOVwPeT4zVsqRJ0l0k",
+  authDomain: "my-money-journal.firebaseapp.com",
+  databaseURL: "https://my-money-journal-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "my-money-journal",
+};
+
+let firebaseEnabled = false;
+let fbAuth = null, fbDb = null, fbUser = null;
+
+function initFirebase(){
+  if(!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('여기에')>=0) return false;
+  if(!FIREBASE_CONFIG.databaseURL || FIREBASE_CONFIG.databaseURL.indexOf('여기에')>=0) return false;
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb = firebase.database();
+    firebaseEnabled = true;
+    return true;
+  }catch(e){ console.error('firebase init failed', e); return false; }
+}
+let data = { categories: [], entries: [], feedback: {}, monthFeedback: {}, weeklyBudgets: {}, monthlyBudgets: {}, dailyCategoryBudgets: {}, annualPlan: {}, annualEvents: {}, shortRoadmap: {}, longRoadmap: null, assetItems: [], assetSnapshots: {}, assetFeedback: {}, projects: [], projectReceipts: {}, projectRefDate: null, lastBackupDate: null };
+let currentTab = 'week';
+let refDate = new Date();
+let monthRef = new Date();
+let roadmapSubTab = 'annual';
+let roadmapYear = new Date().getFullYear();
+let assetMonthRef = new Date();
+let projectSubTab = 'calendar';
+let projectMonthRef = new Date();
+let assetChartRange = 'recent';
+
+const DEFAULT_ASSET_ITEMS = [
+  {name:'CMA/입출금통장', group:'safe'},
+  {name:'예비비저축', group:'safe'},
+  {name:'국내주식', group:'invest'},
+  {name:'해외주식', group:'invest'},
+  {name:'프로젝트 투자', group:'invest'},
+  {name:'부동산', group:'fixed'},
+];
+
+const DEFAULT_CATS = [
+  {name:'생활비', type:'expense', subtype:'fixed', budget:1000000},
+  {name:'교통비', type:'expense', subtype:'fixed', budget:99000},
+  {name:'인터넷/핸드폰', type:'expense', subtype:'fixed', budget:71000},
+  {name:'보험료', type:'expense', subtype:'fixed', budget:224000},
+  {name:'구독료', type:'expense', subtype:'fixed', budget:29000},
+  {name:'회비', type:'expense', subtype:'fixed', budget:30000},
+  {name:'외식', type:'expense', subtype:'variable', budget:100000},
+  {name:'생활용품', type:'expense', subtype:'variable', budget:40000},
+  {name:'머리/화장품', type:'expense', subtype:'variable', budget:50000},
+  {name:'의류구매', type:'expense', subtype:'variable', budget:0},
+  {name:'의료비', type:'expense', subtype:'variable', budget:0},
+  {name:'강의', type:'expense', subtype:'variable', budget:20000},
+  {name:'책/교재구매', type:'expense', subtype:'variable', budget:15000},
+  {name:'음료간식비', type:'expense', subtype:'variable', budget:30000},
+  {name:'특별교통비', type:'expense', subtype:'variable', budget:10000},
+  {name:'만남/경조사', type:'expense', subtype:'variable', budget:30000},
+  {name:'특별지출', type:'expense', subtype:'variable', budget:0},
+  {name:'근로소득', type:'income', subtype:'fixed', budget:3500000},
+  {name:'금융소득', type:'income', subtype:'variable', budget:0},
+  {name:'기타소득', type:'income', subtype:'variable', budget:0},
+  {name:'월급투자저축', type:'saving', subtype:'fixed', budget:1500000},
+  {name:'이자투자저축', type:'saving', subtype:'variable', budget:0},
+  {name:'예비비저축', type:'saving', subtype:'fixed', budget:50000},
+  {name:'청약저축', type:'saving', subtype:'fixed', budget:30000},
+];
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function autoGrow(el){ el.style.height='auto'; el.style.height=(el.scrollHeight)+'px'; }
+function initAutoGrow(){
+  document.querySelectorAll('textarea.autogrow').forEach(el=>{
+    autoGrow(el);
+    el.oninput = ()=> autoGrow(el);
+  });
+}
+function won(n){ return (n||0).toLocaleString('ko-KR') + '원'; }
+function isoDate(d){ return d.toISOString().slice(0,10); }
+function monKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+
+function applyMigrationsAndDefaults(){
+  if(!data.monthFeedback) data.monthFeedback = {};
+  if(!data.weeklyBudgets) data.weeklyBudgets = {};
+  if(!data.monthlyBudgets) data.monthlyBudgets = {};
+  if(!data.dailyCategoryBudgets) data.dailyCategoryBudgets = {};
+  if(!data.annualPlan) data.annualPlan = {};
+  if(!data.annualEvents) data.annualEvents = {};
+  if(!data.shortRoadmap) data.shortRoadmap = {};
+  if(!data.longRoadmap) data.longRoadmap = null;
+  if(!data.assetItems || data.assetItems.length===0) data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
+  if(!data.assetSnapshots) data.assetSnapshots = {};
+  if(!data.assetFeedback) data.assetFeedback = {};
+  if(!data.projects) data.projects = [];
+  if(!data.projectReceipts) data.projectReceipts = {};
+  if(data.projectRefDate===undefined) data.projectRefDate = null;
+  if(data.lastBackupDate===undefined) data.lastBackupDate = null;
+  if(!data.categories || data.categories.length===0) data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
+}
+
+async function load(){
+  try{
+    if(firebaseEnabled && fbUser){
+      const snap = await fbDb.ref('users/'+fbUser.uid+'/data').get();
+      if(snap.exists()){ data = snap.val(); applyMigrationsAndDefaults(); }
+      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+    } else if(typeof window.storage !== 'undefined'){
+      const r = await window.storage.get(STORAGE_KEY, false);
+      if(r && r.value){ data = JSON.parse(r.value); applyMigrationsAndDefaults(); }
+      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
+      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+    }
+  }catch(e){
+    data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
+    data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
+    await save();
+  }
+  render();
+}
+async function save(){
+  try{
+    if(firebaseEnabled && fbUser){
+      await fbDb.ref('users/'+fbUser.uid+'/data').set(data);
+    } else if(typeof window.storage !== 'undefined'){
+      await window.storage.set(STORAGE_KEY, JSON.stringify(data), false);
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+  }
+  catch(e){ console.error('save failed', e); }
+}
+
+function getWeekRange(d){
+  const day = (d.getDay()+6)%7; // 0=Mon
+  const mon = new Date(d); mon.setDate(d.getDate()-day); mon.setHours(0,0,0,0);
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  return {mon, sun};
+}
+function weekKey(mon){ return isoDate(mon); }
+function prevWeekKey(mon){ const p = new Date(mon); p.setDate(mon.getDate()-7); return weekKey(p); }
+
+function monthBounds(d){
+  const start = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';
+  const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  const end = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  return {start, end};
+}
+function catById(id){ return data.categories.find(c=>c.id===id); }
+function findEventById(id){
+  if(!id) return null;
+  for(const yr in data.annualEvents){
+    const found = (data.annualEvents[yr]||[]).find(ev=>ev.id===id);
+    if(found) return found;
+  }
+  return null;
+}
+
+// freeze this period's budget numbers once the period is fully in the past, so later
+// changes to a category's default budget don't retroactively rewrite finished history.
+// The current/future period stays "live" — editing the default applies immediately.
+function isPastWeek(monISO){
+  const mon = new Date(monISO+'T00:00:00');
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  const today = new Date(new Date().toDateString());
+  return sun < today;
+}
+function isPastMonth(mk){
+  const now = new Date();
+  const curMk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  return mk < curMk;
+}
+function freezeWeekBudgets(wk){
+  if(!data.weeklyBudgets[wk]) data.weeklyBudgets[wk] = {};
+  if(!isPastWeek(wk)) return; // current/future week stays live
+  let dirty = false;
+  data.categories.forEach(c=>{
+    if((c.subtype||'variable')==='variable' && data.weeklyBudgets[wk][c.id]===undefined){
+      data.weeklyBudgets[wk][c.id] = (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
+      dirty = true;
+    }
+  });
+  if(dirty) save();
+}
+function freezeMonthBudgets(mk){
+  if(!data.monthlyBudgets[mk]) data.monthlyBudgets[mk] = {};
+  if(!isPastMonth(mk)) return; // current/future month stays live
+  let dirty = false;
+  data.categories.forEach(c=>{
+    if(data.monthlyBudgets[mk][c.id]===undefined){
+      data.monthlyBudgets[mk][c.id] = c.budget||0;
+      dirty = true;
+    }
+  });
+  if(dirty) save();
+}
+
+function entriesInRange(startISO, endISO){
+  return data.entries.filter(e=> e.date >= startISO && e.date <= endISO);
+}
+
+function render(){
+  const app = document.getElementById('app');
+  const overdue = data.entries.length>0 && daysSinceLastBackup() >= 30;
+  const backupBanner = overdue ? `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--gold-soft);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:11.5px;">
+      <span>${data.lastBackupDate?`마지막 백업 후 ${daysSinceLastBackup()}일 지났어요`:'아직 백업한 적이 없어요'} · 안전하게 파일로 저장해두세요</span>
+      <button id="quickBackupBtn" style="background:var(--gold);color:#fff;border:none;border-radius:5px;padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap;">지금 백업</button>
+    </div>` : '';
+  app.innerHTML = `
+    <header class="top">
+      <div><h1>머니저널</h1><div class="sub">예산 · 로드맵 · 자산을 한 곳에</div></div>
+      ${firebaseEnabled && fbUser ? `<div class="sync-badge"><span class="dot"></span>${fbUser.email}</div>` : ''}
+    </header>
+    ${backupBanner}
+    <nav class="tabs">
+      <button data-tab="week" class="${currentTab==='week'?'active':''}">주간입력</button>
+      <button data-tab="month" class="${currentTab==='month'?'active':''}">월간통계</button>
+      <button data-tab="roadmap" class="${currentTab==='roadmap'?'active':''}">로드맵</button>
+      <button data-tab="asset" class="${currentTab==='asset'?'active':''}">자산현황</button>
+      <button data-tab="project" class="${currentTab==='project'?'active':''}">프로젝트</button>
+      <button data-tab="search" class="${currentTab==='search'?'active':''}">검색</button>
+      <button data-tab="cat" class="${currentTab==='cat'?'active':''}">카테고리 설정</button>
+    </nav>
+    <div id="tabbody"></div>
+  `;
+  const quickBackupBtn = document.getElementById('quickBackupBtn');
+  if(quickBackupBtn) quickBackupBtn.onclick = exportBackup;
+  app.querySelectorAll('nav.tabs button').forEach(b=>{
+    b.onclick = ()=>{ currentTab = b.dataset.tab; render(); };
+  });
+  const body = document.getElementById('tabbody');
+  if(currentTab==='week') body.innerHTML = weekView();
+  if(currentTab==='month') body.innerHTML = monthView();
+  if(currentTab==='roadmap') body.innerHTML = roadmapView();
+  if(currentTab==='asset') body.innerHTML = assetView();
+  if(currentTab==='project') body.innerHTML = projectView();
+  if(currentTab==='search') body.innerHTML = searchView();
+  if(currentTab==='cat') body.innerHTML = catView();
+  bindTabEvents();
+}
+
+/* ---------- WEEK VIEW ---------- */
+function weekView(){
+  const {mon, sun} = getWeekRange(refDate);
+  const wk = weekKey(mon);
+  freezeWeekBudgets(wk);
+  const fb = data.feedback[wk] || {total:'', worst:'', best:'', next:''};
+  const stamped = fb.total && fb.total.trim().length>0;
+  const prevWk = prevWeekKey(mon);
+  const prevFb = data.feedback[prevWk];
+  const hasPrevGoal = prevFb && prevFb.next && prevFb.next.trim().length>0;
+
+  const days = [];
+  for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); days.push(d); }
+  const dayNames=['월','화','수','목','금','토','일'];
+  const todayISO = isoDate(new Date());
+
+  // budget table for the week, grouped by fixed/variable
+  const wkStart=isoDate(mon), wkEnd=isoDate(sun);
+  const rangeEntries = entriesInRange(wkStart, wkEnd);
+  const dayISOs = days.map(isoDate);
+  const wkVarCats = data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='variable');
+  function catWeeklyDefault(c){
+    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
+    return override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
+  }
+  function dailyBudgetValue(dateISO, c){
+    const stored = data.dailyCategoryBudgets[dateISO] && data.dailyCategoryBudgets[dateISO][c.id];
+    return stored!=null ? stored : 0;
+  }
+  function weeklyBudgetFromDaily(c){
+    const anySet = dayISOs.some(d => data.dailyCategoryBudgets[d] && data.dailyCategoryBudgets[d][c.id]!=null);
+    if(!anySet) return catWeeklyDefault(c);
+    return dayISOs.reduce((s,d)=>s+dailyBudgetValue(d,c),0);
+  }
+
+  let daysHtml = days.map((d,i)=>{
+    const diso = isoDate(d);
+    const dayEntries = data.entries.filter(e=>e.date===diso);
+    const total = dayEntries.filter(e=>catById(e.categoryId)?.type==='expense').reduce((s,e)=>s+e.amount,0);
+    const entriesHtml = dayEntries.map(e=>{
+      const c = catById(e.categoryId);
+      const cls = c?.type==='income' ? 'income' : (c?.type==='saving' ? 'saving' : '');
+      const ev = findEventById(e.eventId);
+      return `<div class="entry">
+        <span class="cat ${cls}">${c?c.name:'?'}</span>${ev?` <span class="cat" style="background:var(--brand-soft);color:var(--brand);">${escapeHtml(ev.name)}</span>`:''}<br>
+        <span>${e.item||''}</span> <span class="amt">${won(e.amount)}</span>
+        <button class="del" data-eid="${e.id}">삭제</button>
+      </div>`;
+    }).join('');
+    const dayBudgets = data.dailyCategoryBudgets[diso] || {};
+    const budgetChips = wkVarCats.filter(c=>dayBudgets[c.id]).map(c=>`
+      <div class="entry" style="background:var(--gold-soft);border-radius:4px;padding:3px 4px;margin-bottom:3px;border-bottom:none;">
+        <span class="cat" style="background:var(--gold);color:#fff;">예산</span> ${c.name} <span class="amt">${won(dayBudgets[c.id])}</span>
+        <button class="del-budget" data-date="${diso}" data-cid="${c.id}">삭제</button>
+      </div>`).join('');
+    return `<div class="daycard ${diso===todayISO?'today':''}">
+      <div class="dhead"><span class="dname">${dayNames[i]}</span><span class="ddate">${d.getMonth()+1}/${d.getDate()}</span></div>
+      ${budgetChips}
+      <button class="addbudgetbtn" data-date="${diso}" style="width:100%;margin-bottom:6px;padding:4px;font-size:10.5px;border:1px dashed var(--gold);background:none;border-radius:6px;color:var(--gold);cursor:pointer;">+ 예산 넣기</button>
+      ${entriesHtml || '<div style="font-size:10.5px;color:var(--ink-soft);padding:4px 0;">정산 기록 없음</div>'}
+      <button class="addbtn" data-date="${diso}">+ 정산 추가</button>
+      ${total>0?`<div class="daytotal">지출 ${won(total)}</div>`:''}
+    </div>`;
+  }).join('');
+
+  function wkRowsFor(list){
+    return list.map(c=>{
+      const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+      const weeklyBudget = weeklyBudgetFromDaily(c);
+      const diff = weeklyBudget - spent;
+      const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
+      return `<tr>
+        <td>${c.name}</td>
+        <td class="num">${won(weeklyBudget)}</td>
+        <td class="num">${won(spent)}</td>
+        <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</td>
+      </tr>
+      <tr><td colspan="4" style="padding-top:0;border-bottom:1px solid var(--line);"><div class="bar-bg"><div class="bar-fill ${spent>weeklyBudget?'over':''}" style="width:${pct}%"></div></div></td></tr>`;
+    }).join('');
+  }
+  let budgetRows = wkRowsFor(wkVarCats);
+
+  function inflowRowsFor(list){
+    return list.map(c=>{
+      const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+      const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
+      const weeklyBudget = override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
+      const diff = spent - weeklyBudget;
+      const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
+      return `<tr>
+        <td>${c.name}</td>
+        <td class="num"><input type="number" class="wk-budget-input" data-cid="${c.id}" value="${weeklyBudget}" style="width:70px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num">${won(spent)}</td>
+        <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
+      </tr>
+      <tr><td colspan="4" style="padding-top:0;border-bottom:1px solid var(--line);"><div class="bar-bg"><div class="bar-fill ${spent<weeklyBudget?'over':''}" style="width:${pct}%"></div></div></td></tr>`;
+    }).join('');
+  }
+  // income received this week (budget vs actual, same as expense) - variable only
+  const incomeCats = data.categories.filter(c=>c.type==='income' && (c.subtype||'variable')==='variable');
+  const incomeRows = inflowRowsFor(incomeCats);
+  const incomeWeekTotal = rangeEntries.filter(e=>incomeCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
+  const incomeWeekBudget = incomeCats.reduce((s,c)=>{
+    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
+    return s + (override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345)));
+  },0);
+
+  // saving/investing this week (budget vs actual) - variable only
+  const savingCats = data.categories.filter(c=>c.type==='saving' && (c.subtype||'variable')==='variable');
+  const savingRows = inflowRowsFor(savingCats);
+  const savingWeekTotal = rangeEntries.filter(e=>savingCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
+  const savingWeekBudget = savingCats.reduce((s,c)=>{
+    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
+    return s + (override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345)));
+  },0);
+
+  // fixed items (expense + income + saving) that only happen once a month — checklist style
+  const wkFixedCats = data.categories.filter(c=>(c.subtype||'variable')==='fixed');
+  const {start:mStart, end:mEnd} = monthBounds(mon);
+  const monthEntries = entriesInRange(mStart, mEnd);
+  const fixedRows = wkFixedCats.map(c=>{
+    const paidEntries = monthEntries.filter(e=>e.categoryId===c.id);
+    const paidAmt = paidEntries.reduce((s,e)=>s+e.amount,0);
+    const paid = paidEntries.length>0;
+    const verb = c.type==='expense' ? (paid?'납부완료':'예정') : (paid?'입금완료':'예정');
+    return `<div class="catrow" style="background:${paid?'var(--green-soft)':'#fff'};">
+      <span class="tag ${paid?'':tagClass(c)}" style="background:${paid?'var(--green)':(c.type==='expense'?'#EDE9FE':(c.type==='income'?'var(--gold-soft)':'#EDE9FE'))};color:${paid?'#fff':(c.type==='expense'?'#8B5CF6':(c.type==='income'?'var(--gold)':'#8B5CF6'))};">${verb}</span>
+      <span class="nm">${c.name}</span>
+      <span style="font-size:11.5px;color:var(--ink-soft);">${won(paid?paidAmt:(c.budget||0))}</span>
+      <button class="fixedpay" data-cid="${c.id}" style="background:none;border:1px solid var(--line);border-radius:5px;padding:3px 7px;font-size:11px;cursor:pointer;">${paid?'추가기록':'기록'}</button>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="card-grid">
+    ${hasPrevGoal ? `
+    <div class="card full" style="border-left:4px solid var(--brand);">
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:4px;">지난주에 적어둔 다음주 반영사항</div>
+      <div style="font-size:13px;margin-bottom:8px;">${prevFb.next}</div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" class="goal-check-week" data-wk="${prevWk}" ${prevFb.nextAchieved?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
+        이 목표를 달성했어요
+      </label>
+    </div>` : ''}
+    <div class="weekbar full">
+      <button id="prevWk">‹</button>
+      <div class="weeklabel">
+        <div class="range">${mon.getMonth()+1}/${mon.getDate()} ~ ${sun.getMonth()+1}/${sun.getDate()}</div>
+        <div class="wk">${mon.getFullYear()}년 ${Math.ceil((((mon - new Date(mon.getFullYear(),0,1))/86400000)+new Date(mon.getFullYear(),0,1).getDay()+1)/7)}주차</div>
+      </div>
+      <button id="nextWk">›</button>
+    </div>
+    <div class="daysrow full">${daysHtml}</div>
+
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번 주 변동지출 예산 대비</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">위 요일 카드에서 넣은 예산이 자동으로 합산돼요. 아직 안 넣었다면 기존 기본값이 표시돼요.</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">주간예산</th><th class="num">정산</th><th class="num">오차</th></tr>
+        ${budgetRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">카테고리 설정에서 예산을 등록해보세요</td></tr>'}
+      </table>
+    </div>
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번달 고정 항목 (월 1회)</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">근로소득, 월급저축, 청약저축처럼 한 달에 한 번 일어나는 항목 — 발생일에 기록하면 자동으로 체크돼요</div>
+      <div class="catlist">${fixedRows || '<div class="empty" style="padding:10px;">고정 항목이 없어요</div>'}</div>
+    </div>
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번 주 변동 수입 · 저축 (예상 대비)</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">매주 금액이 바뀌는 항목만 표시돼요 (근로소득 등 월 1회 항목은 고정 항목 체크리스트 참고). 오차가 (-)면 예상보다 덜 들어온 거예요.</div>
+      <div class="grouplabel">수입 · 예상 ${won(incomeWeekBudget)} / 실제 ${won(incomeWeekTotal)}</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">이번주예상</th><th class="num">실제</th><th class="num">오차</th></tr>
+        ${incomeRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">변동 수입 카테고리가 없어요</td></tr>'}
+      </table>
+      <div class="grouplabel">저축 · 예상 ${won(savingWeekBudget)} / 실제 ${won(savingWeekTotal)}</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">이번주예상</th><th class="num">실제</th><th class="num">오차</th></tr>
+        ${savingRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">변동 저축 카테고리가 없어요</td></tr>'}
+      </table>
+    </div>
+    <div class="card stampwrap">
+      ${stamped?'<div class="stamp">정산<br>완료</div>':''}
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">주간 피드백</h3>
+      <label class="flabel">총평</label>
+      <textarea class="feedback" id="fb-total" placeholder="이번 주 지출 총평을 적어보세요">${fb.total}</textarea>
+      <label class="flabel">베스트</label>
+      <textarea class="feedback" id="fb-best" placeholder="잘한 소비">${fb.best}</textarea>
+      <label class="flabel">워스트</label>
+      <textarea class="feedback" id="fb-worst" placeholder="아쉬운 소비">${fb.worst}</textarea>
+      <label class="flabel">다음주 반영사항</label>
+      <textarea class="feedback" id="fb-next" placeholder="다음주에 적용할 것">${fb.next}</textarea>
+    </div>
+    </div>
+  `;
+}
+
+function bindTabEvents(){
+  const prevWk = document.getElementById('prevWk');
+  const nextWk = document.getElementById('nextWk');
+  if(prevWk) prevWk.onclick = ()=>{ refDate.setDate(refDate.getDate()-7); render(); };
+  if(nextWk) nextWk.onclick = ()=>{ refDate.setDate(refDate.getDate()+7); render(); };
+
+  document.querySelectorAll('.addbtn').forEach(b=>{
+    b.onclick = ()=> openAddModal(b.dataset.date);
+  });
+  document.querySelectorAll('.addbudgetbtn').forEach(b=>{
+    b.onclick = ()=> openAddBudgetModal(b.dataset.date);
+  });
+  document.querySelectorAll('.del-budget').forEach(b=>{
+    b.onclick = async ()=>{
+      const dateISO = b.dataset.date, cid = b.dataset.cid;
+      if(data.dailyCategoryBudgets[dateISO]) delete data.dailyCategoryBudgets[dateISO][cid];
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.fixedpay').forEach(b=>{
+    b.onclick = ()=> openAddModal(isoDate(new Date()), b.dataset.cid);
+  });
+  document.querySelectorAll('.entry .del').forEach(b=>{
+    b.onclick = async ()=>{
+      data.entries = data.entries.filter(e=>e.id!==b.dataset.eid);
+      await save(); render();
+    };
+  });
+  ['fb-total','fb-best','fb-worst','fb-next'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.onblur = async ()=>{
+      const {mon} = getWeekRange(refDate);
+      const wk = weekKey(mon);
+      if(!data.feedback[wk]) data.feedback[wk] = {total:'',worst:'',best:'',next:''};
+      const map = {'fb-total':'total','fb-best':'best','fb-worst':'worst','fb-next':'next'};
+      data.feedback[wk][map[id]] = el.value;
+      await save();
+    };
+  });
+  ['mfb-total','mfb-best','mfb-worst','mfb-next'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.onblur = async ()=>{
+      const mk = monKey(monthRef);
+      if(!data.monthFeedback) data.monthFeedback = {};
+      if(!data.monthFeedback[mk]) data.monthFeedback[mk] = {total:'',worst:'',best:'',next:''};
+      const map = {'mfb-total':'total','mfb-best':'best','mfb-worst':'worst','mfb-next':'next'};
+      data.monthFeedback[mk][map[id]] = el.value;
+      await save();
+    };
+  });
+  document.querySelectorAll('.goal-check-week').forEach(cb=>{
+    cb.onchange = async ()=>{
+      const wk = cb.dataset.wk;
+      if(!data.feedback[wk]) data.feedback[wk] = {total:'',worst:'',best:'',next:''};
+      data.feedback[wk].nextAchieved = cb.checked;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.goal-check-month').forEach(cb=>{
+    cb.onchange = async ()=>{
+      const mk = cb.dataset.mk;
+      if(!data.monthFeedback) data.monthFeedback = {};
+      if(!data.monthFeedback[mk]) data.monthFeedback[mk] = {total:'',worst:'',best:'',next:''};
+      data.monthFeedback[mk].nextAchieved = cb.checked;
+      await save(); render();
+    };
+  });
+
+  const monthPrev = document.getElementById('monthPrev');
+  const monthNext = document.getElementById('monthNext');
+  if(monthPrev) monthPrev.onclick = ()=>{ monthRef.setMonth(monthRef.getMonth()-1); render(); };
+  if(monthNext) monthNext.onclick = ()=>{ monthRef.setMonth(monthRef.getMonth()+1); render(); };
+
+  const catBudgetInputs = document.querySelectorAll('.cat-budget-input');
+  catBudgetInputs.forEach(inp=>{
+    inp.onchange = async ()=>{
+      const c = catById(inp.dataset.cid);
+      c.budget = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  const catWeekInputs = document.querySelectorAll('.cat-week-input');
+  catWeekInputs.forEach(inp=>{
+    inp.onchange = async ()=>{
+      const c = catById(inp.dataset.cid);
+      c.weeklyBudget = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  const wkBudgetInputs = document.querySelectorAll('.wk-budget-input');
+  wkBudgetInputs.forEach(inp=>{
+    inp.onchange = async ()=>{
+      const {mon} = getWeekRange(refDate);
+      const wk = weekKey(mon);
+      if(!data.weeklyBudgets[wk]) data.weeklyBudgets[wk] = {};
+      data.weeklyBudgets[wk][inp.dataset.cid] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  const dailyBudgetInputs = document.querySelectorAll('.daily-budget-input');
+  dailyBudgetInputs.forEach(inp=>{
+    inp.onchange = async ()=>{
+      const dateISO = inp.dataset.date;
+      if(!data.dailyCategoryBudgets[dateISO]) data.dailyCategoryBudgets[dateISO] = {};
+      data.dailyCategoryBudgets[dateISO][inp.dataset.cid] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  const monthBudgetInputs = document.querySelectorAll('.month-budget-input');
+  monthBudgetInputs.forEach(inp=>{
+    inp.onchange = async ()=>{
+      const mk = monKey(monthRef);
+      if(!data.monthlyBudgets[mk]) data.monthlyBudgets[mk] = {};
+      data.monthlyBudgets[mk][inp.dataset.cid] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.rm').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('이 카테고리를 삭제할까요? 관련 기록은 남아있어요.')) return;
+      data.categories = data.categories.filter(c=>c.id!==b.dataset.cid);
+      await save(); render();
+    };
+  });
+  const newCatType = document.getElementById('newCatType');
+  const newCatSubtype = document.getElementById('newCatSubtype');
+  if(newCatType && newCatSubtype){ newCatSubtype.style.display = ''; }
+  const addCatBtn = document.getElementById('addCatBtn');
+  if(addCatBtn) addCatBtn.onclick = async ()=>{
+    const name = document.getElementById('newCatName').value.trim();
+    const type = document.getElementById('newCatType').value;
+    const subtype = document.getElementById('newCatSubtype').value;
+    if(!name) return;
+    const newCat = {id:uid(), name, type, subtype, budget:0};
+    data.categories.push(newCat);
+    await save(); render();
+  };
+  const exportBackupBtn = document.getElementById('exportBackupBtn');
+  if(exportBackupBtn) exportBackupBtn.onclick = exportBackup;
+  const importBackupBtn = document.getElementById('importBackupBtn');
+  const importFileInput = document.getElementById('importFileInput');
+  if(importBackupBtn && importFileInput){
+    importBackupBtn.onclick = ()=> importFileInput.click();
+    importFileInput.onchange = (e)=>{
+      const file = e.target.files[0];
+      if(file) importBackup(file);
+      importFileInput.value = '';
+    };
+  }
+  const logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.onclick = ()=>{ if(confirm('로그아웃할까요?')) fbAuth.signOut(); };
+
+  const searchInput = document.getElementById('searchInput');
+  const searchCat = document.getElementById('searchCat');
+  if(searchInput){
+    const doSearch = ()=>{ document.getElementById('searchResults').innerHTML = renderSearchResults(searchInput.value, searchCat.value); };
+    searchInput.oninput = doSearch;
+    searchCat.onchange = doSearch;
+  }
+
+  // roadmap sub-tab switch
+  document.querySelectorAll('.rtabbtn').forEach(b=>{
+    b.onclick = ()=>{ roadmapSubTab = b.dataset.rtab; render(); };
+  });
+  const yearPrev = document.getElementById('yearPrev');
+  const yearNext = document.getElementById('yearNext');
+  if(yearPrev) yearPrev.onclick = ()=>{ roadmapYear--; render(); };
+  if(yearNext) yearNext.onclick = ()=>{ roadmapYear++; render(); };
+
+  // annual plan inputs
+  document.querySelectorAll('.annual-plan-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = roadmapYear;
+      if(!data.annualPlan[y]) data.annualPlan[y] = {income:{},expense:{},saving:{},events:{}};
+      data.annualPlan[y][inp.dataset.type][inp.dataset.month] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.annual-event-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = roadmapYear;
+      if(!data.annualPlan[y]) data.annualPlan[y] = {income:{},expense:{},saving:{},events:{}};
+      if(!data.annualPlan[y].events) data.annualPlan[y].events = {};
+      data.annualPlan[y].events[inp.dataset.month] = inp.value;
+      await save(); render();
+    };
+  });
+  const addEventBtn = document.getElementById('addEventBtn');
+  if(addEventBtn) addEventBtn.onclick = async ()=>{
+    const name = document.getElementById('newEventName').value.trim();
+    const month = parseInt(document.getElementById('newEventMonth').value)||1;
+    const plannedAmount = parseInt(document.getElementById('newEventPlan').value)||0;
+    if(!name) return;
+    const y = roadmapYear;
+    if(!data.annualEvents[y]) data.annualEvents[y] = [];
+    data.annualEvents[y].push({id:uid(), name, month, plannedAmount});
+    await save(); render();
+  };
+  document.querySelectorAll('.rm-event').forEach(b=>{
+    b.onclick = async ()=>{
+      const y = roadmapYear;
+      data.annualEvents[y] = (data.annualEvents[y]||[]).filter(ev=>ev.id!==b.dataset.id);
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.event-plan-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = roadmapYear;
+      const ev = (data.annualEvents[y]||[]).find(e=>e.id===inp.dataset.id);
+      if(ev){ ev.plannedAmount = parseInt(inp.value)||0; await save(); render(); }
+    };
+  });
+
+  // short roadmap
+  const addRmItem = document.getElementById('addRmItem');
+  if(addRmItem) addRmItem.onclick = async ()=>{
+    const nameInp = document.getElementById('newRmItem');
+    const name = nameInp.value.trim();
+    if(!name) return;
+    const y = roadmapYear;
+    if(!data.shortRoadmap[y]) data.shortRoadmap[y] = {items:[],plan:{},actual:{}};
+    data.shortRoadmap[y].items.push({id:uid(), name});
+    await save(); render();
+  };
+  document.querySelectorAll('.rm-item').forEach(b=>{
+    b.onclick = async ()=>{
+      const y = roadmapYear;
+      const rm = data.shortRoadmap[y];
+      rm.items = rm.items.filter(it=>it.id!==b.dataset.id);
+      delete rm.plan[b.dataset.id]; delete rm.actual[b.dataset.id];
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.rm-item-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = roadmapYear;
+      const rm = data.shortRoadmap[y];
+      const store = rm[inp.dataset.kind];
+      if(!store[inp.dataset.item]) store[inp.dataset.item] = {};
+      store[inp.dataset.item][inp.dataset.month] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+
+  // long roadmap
+  const lrStart = document.getElementById('lr-start');
+  if(lrStart) lrStart.onchange = async ()=>{
+    ensureLongRoadmap();
+    data.longRoadmap.startingAsset = parseInt(lrStart.value)||0;
+    await save(); render();
+  };
+  const addYearBtn = document.getElementById('addYearBtn');
+  if(addYearBtn) addYearBtn.onclick = async ()=>{
+    ensureLongRoadmap();
+    const years = data.longRoadmap.years;
+    const lastYear = years.length ? years[years.length-1].year : new Date().getFullYear();
+    years.push({id:uid(), year:lastYear+1, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''});
+    await save(); render();
+  };
+  const addYearsBulkBtn = document.getElementById('addYearsBulkBtn');
+  if(addYearsBulkBtn) addYearsBulkBtn.onclick = async ()=>{
+    ensureLongRoadmap();
+    const count = parseInt(document.getElementById('bulkYearsCount').value)||0;
+    if(count<=0) return;
+    const years = data.longRoadmap.years;
+    let lastYear = years.length ? years[years.length-1].year : new Date().getFullYear();
+    for(let i=0;i<count;i++){
+      lastYear++;
+      years.push({id:uid(), year:lastYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''});
+    }
+    await save(); render();
+  };
+  document.querySelectorAll('.rm-year').forEach(b=>{
+    b.onclick = async ()=>{
+      data.longRoadmap.years = data.longRoadmap.years.filter(y=>y.id!==b.dataset.id);
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.ly-year-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = data.longRoadmap.years.find(x=>x.id===inp.dataset.id);
+      if(!y) return;
+      y.year = parseInt(inp.value)||y.year;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.ly-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const y = data.longRoadmap.years.find(x=>x.id===inp.dataset.id);
+      if(!y) return;
+      const field = inp.dataset.field;
+      const numeric = ['withdrawal','savings','returnPct','realEstate'].includes(field);
+      y[field] = numeric ? (parseFloat(inp.value)||0) : inp.value;
+      await save(); render();
+    };
+  });
+
+  // asset view
+  const assetPrev = document.getElementById('assetPrev');
+  const assetNext = document.getElementById('assetNext');
+  if(assetPrev) assetPrev.onclick = ()=>{ assetMonthRef.setMonth(assetMonthRef.getMonth()-1); render(); };
+  if(assetNext) assetNext.onclick = ()=>{ assetMonthRef.setMonth(assetMonthRef.getMonth()+1); render(); };
+  document.querySelectorAll('.asset-range-btn').forEach(b=>{
+    b.onclick = ()=>{ assetChartRange = b.dataset.range; render(); };
+  });
+  document.querySelectorAll('.asset-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const mk = assetMonKey(assetMonthRef);
+      if(!data.assetSnapshots[mk]) data.assetSnapshots[mk] = {};
+      data.assetSnapshots[mk][inp.dataset.id] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.rm-asset').forEach(b=>{
+    b.onclick = async ()=>{
+      data.assetItems = data.assetItems.filter(i=>i.id!==b.dataset.id);
+      await save(); render();
+    };
+  });
+  const addAssetBtn = document.getElementById('addAssetBtn');
+  if(addAssetBtn) addAssetBtn.onclick = async ()=>{
+    const name = document.getElementById('newAssetName').value.trim();
+    const group = document.getElementById('newAssetGroup').value;
+    if(!name) return;
+    data.assetItems.push({id:uid(), name, group});
+    await save(); render();
+  };
+  const assetFb = document.getElementById('asset-fb');
+  if(assetFb) assetFb.onblur = async ()=>{
+    const mk = assetMonKey(assetMonthRef);
+    data.assetFeedback[mk] = assetFb.value;
+    await save();
+  };
+
+  // project view
+  document.querySelectorAll('[data-ptab]').forEach(b=>{
+    b.onclick = ()=>{ projectSubTab = b.dataset.ptab; render(); };
+  });
+  const projPrev = document.getElementById('projPrev');
+  const projNext = document.getElementById('projNext');
+  if(projPrev) projPrev.onclick = ()=>{ projectMonthRef.setMonth(projectMonthRef.getMonth()-1); render(); };
+  if(projNext) projNext.onclick = ()=>{ projectMonthRef.setMonth(projectMonthRef.getMonth()+1); render(); };
+  const addProjBtn = document.getElementById('addProjBtn');
+  if(addProjBtn) addProjBtn.onclick = async ()=>{
+    const name = document.getElementById('newProjName').value.trim();
+    if(!name) return;
+    const today = new Date();
+    const start = toISO(today);
+    const endD = new Date(today); endD.setFullYear(endD.getFullYear()+1);
+    data.projects.push({id:uid(), code:'', nameKr:name, nameEn:'', principal:0, startDate:start, endDate:toISO(endD), rate1:0, rate2:null, rate3:null, note:''});
+    await save(); render();
+  };
+  const projRefDate = document.getElementById('projRefDate');
+  if(projRefDate) projRefDate.onchange = async ()=>{
+    data.projectRefDate = projRefDate.value || null;
+    await save(); render();
+  };
+  document.querySelectorAll('.rm-project').forEach(b=>{
+    b.onclick = async ()=>{
+      data.projects = data.projects.filter(p=>p.id!==b.dataset.id);
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.proj-field').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const p = data.projects.find(x=>x.id===inp.dataset.id);
+      if(!p) return;
+      const field = inp.dataset.field;
+      const numericFields = ['principal','rate1'];
+      const floatOptionalFields = ['rate2','rate3'];
+      if(numericFields.includes(field)) p[field] = parseFloat(inp.value)||0;
+      else if(floatOptionalFields.includes(field)) p[field] = inp.value===''? null : parseFloat(inp.value);
+      else p[field] = inp.value;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.projchip').forEach(chip=>{
+    chip.onclick = async ()=>{
+      const mk = projectMonthRef.getFullYear()+'-'+String(projectMonthRef.getMonth()+1).padStart(2,'0');
+      if(!data.projectReceipts[mk]) data.projectReceipts[mk] = {};
+      const pid = chip.dataset.pid;
+      const proj = data.projects.find(p=>p.id===pid);
+      const refDate = getRefDate();
+      const c = proj ? computeProject(proj, refDate) : {monthlyIncome:0};
+      const cur = data.projectReceipts[mk][pid] || {received:false, amount:c.monthlyIncome};
+      cur.received = !cur.received;
+      data.projectReceipts[mk][pid] = cur;
+      await save(); render();
+    };
+  });
+  initAutoGrow();
+}
+
+/* ---------- MONTH VIEW ---------- */
+function monthView(){
+  const mk = monKey(monthRef);
+  freezeMonthBudgets(mk);
+  const monStart = mk+'-01';
+  const lastDay = new Date(monthRef.getFullYear(), monthRef.getMonth()+1, 0).getDate();
+  const monEnd = mk+'-'+String(lastDay).padStart(2,'0');
+  const rangeEntries = entriesInRange(monStart, monEnd);
+
+  const sumByType = t => rangeEntries.filter(e=>catById(e.categoryId)?.type===t).reduce((s,e)=>s+e.amount,0);
+  const income = sumByType('income'), expense = sumByType('expense'), saving = sumByType('saving');
+  const net = income - expense - saving;
+
+  function mBudget(c){ return data.monthlyBudgets[mk][c.id]!==undefined ? data.monthlyBudgets[mk][c.id] : (c.budget||0); }
+
+  function rowsFor(list){
+    return list.map(c=>{
+      const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+      const budget = mBudget(c);
+      const diff = budget - spent;
+      const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
+      return `<tr>
+        <td>${c.name}</td>
+        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:76px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num">${won(spent)}</td>
+        <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</td>
+      </tr>
+      <tr><td colspan="4" style="padding-top:0;border-bottom:1px solid var(--line);"><div class="bar-bg"><div class="bar-fill ${spent>budget?'over':''}" style="width:${pct}%"></div></div></td></tr>`;
+    }).join('');
+  }
+  const fixedCats = data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='fixed');
+  const variableCats = data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='variable');
+  const fixedBudget = fixedCats.reduce((s,c)=>s+mBudget(c),0);
+  const fixedSpent = rangeEntries.filter(e=>fixedCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
+  const varBudget = variableCats.reduce((s,c)=>s+mBudget(c),0);
+  const varSpent = rangeEntries.filter(e=>variableCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
+
+  const mfb = data.monthFeedback && data.monthFeedback[mk] || {total:'', worst:'', best:'', next:''};
+  const mStamped = mfb.total && mfb.total.trim().length>0;
+  const pmkFeedback = prevMonthKey(monthRef);
+  const prevMfb = data.monthFeedback && data.monthFeedback[pmkFeedback];
+  const hasPrevMonthGoal = prevMfb && prevMfb.next && prevMfb.next.trim().length>0;
+
+  function inflowRowsForMonth(list){
+    return list.map(c=>{
+      const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+      const budget = mBudget(c);
+      const diff = spent - budget;
+      const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
+      return `<tr>
+        <td>${c.name}</td>
+        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:76px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num">${won(spent)}</td>
+        <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
+      </tr>
+      <tr><td colspan="4" style="padding-top:0;border-bottom:1px solid var(--line);"><div class="bar-bg"><div class="bar-fill ${spent<budget?'over':''}" style="width:${pct}%"></div></div></td></tr>`;
+    }).join('');
+  }
+  const incomeCats = data.categories.filter(c=>c.type==='income');
+  const savingCats = data.categories.filter(c=>c.type==='saving');
+  const incomeRowsM = inflowRowsForMonth(incomeCats);
+  const savingRowsM = inflowRowsForMonth(savingCats);
+
+  return `
+    <div class="card-grid">
+    ${hasPrevMonthGoal ? `
+    <div class="card full" style="border-left:4px solid var(--brand);">
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:4px;">지난달에 적어둔 다음달 반영사항</div>
+      <div style="font-size:13px;margin-bottom:8px;">${prevMfb.next}</div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" class="goal-check-month" data-mk="${pmkFeedback}" ${prevMfb.nextAchieved?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
+        이 목표를 달성했어요
+      </label>
+    </div>` : ''}
+    <div class="monthnav full">
+      <button id="monthPrev">‹</button>
+      <div class="m serif">${monthRef.getFullYear()}년 ${monthRef.getMonth()+1}월</div>
+      <button id="monthNext">›</button>
+    </div>
+    <div class="summary-grid full">
+      <div class="box"><div class="lbl">수입</div><div class="val" style="color:var(--gold)">${won(income)}</div></div>
+      <div class="box"><div class="lbl">지출</div><div class="val" style="color:var(--rust)">${won(expense)}</div></div>
+      <div class="box"><div class="lbl">저축</div><div class="val" style="color:var(--green)">${won(saving)}</div></div>
+    </div>
+    <div class="card full" style="text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);">순잔액 (수입-지출-저축)</div>
+      <div style="font-size:20px;font-weight:700;font-family:'Noto Serif KR',serif;color:${net>=0?'var(--green)':'var(--rust)'};">${net>=0?'+':'-'}${won(Math.abs(net))}</div>
+    </div>
+    <div class="card">
+      <div class="grouplabel">수입</div>
+      <div style="font-size:10px;color:var(--ink-soft);margin:-2px 0 4px;">월예산 칸을 누르면 이 달에만 적용되는 값으로 바로 고칠 수 있어요</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">월예산</th><th class="num">정산</th><th class="num">오차</th></tr>
+        ${incomeRowsM || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">기록 없음</td></tr>'}
+      </table>
+    </div>
+    <div class="card">
+      <div class="grouplabel">저축 · 투자</div>
+      <div style="font-size:10px;color:var(--ink-soft);margin:-2px 0 4px;">&nbsp;</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">월예산</th><th class="num">정산</th><th class="num">오차</th></tr>
+        ${savingRowsM || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">기록 없음</td></tr>'}
+      </table>
+    </div>
+    <div class="card">
+      <div class="grouplabel">고정지출 · 예산 ${won(fixedBudget)} / 정산 ${won(fixedSpent)}</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">월예산</th><th class="num">정산</th><th class="num">오차</th></tr>
+        ${rowsFor(fixedCats) || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">기록 없음</td></tr>'}
+      </table>
+    </div>
+    <div class="card">
+      <div class="grouplabel">변동지출 · 예산 ${won(varBudget)} / 정산 ${won(varSpent)}</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">월예산</th><th class="num">정산</th><th class="num">오차</th></tr>
+        ${rowsFor(variableCats) || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">기록 없음</td></tr>'}
+      </table>
+    </div>
+    <div class="card stampwrap">
+      ${mStamped?'<div class="stamp">월정산<br>완료</div>':''}
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">월말 피드백</h3>
+      <label class="flabel">총평</label>
+      <textarea class="feedback" id="mfb-total" placeholder="이번 달 총평을 적어보세요">${mfb.total}</textarea>
+      <label class="flabel">베스트</label>
+      <textarea class="feedback" id="mfb-best" placeholder="잘한 소비/저축">${mfb.best}</textarea>
+      <label class="flabel">워스트</label>
+      <textarea class="feedback" id="mfb-worst" placeholder="아쉬운 지점">${mfb.worst}</textarea>
+      <label class="flabel">다음달 반영사항</label>
+      <textarea class="feedback" id="mfb-next" placeholder="다음달 예산에 반영할 것">${mfb.next}</textarea>
+    </div>
+    </div>
+  `;
+}
+
+/* ---------- ROADMAP VIEW ---------- */
+function roadmapView(){
+  return `
+    <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;">
+      <button class="rtabbtn ${roadmapSubTab==='annual'?'active':''}" data-rtab="annual">연간머니플랜</button>
+      <button class="rtabbtn ${roadmapSubTab==='short'?'active':''}" data-rtab="short">단기로드맵</button>
+      <button class="rtabbtn ${roadmapSubTab==='long'?'active':''}" data-rtab="long">중장기로드맵</button>
+    </div>
+    <div id="roadmapBody">
+      ${roadmapSubTab==='annual' ? annualPlanView() : roadmapSubTab==='short' ? shortRoadmapView() : longRoadmapView()}
+    </div>
+  `;
+}
+
+function annualPlanView(){
+  const year = roadmapYear;
+  if(!data.annualPlan[year]) data.annualPlan[year] = {income:{}, expense:{}, saving:{}, events:{}};
+  const plan = data.annualPlan[year];
+  ['income','expense','saving'].forEach(t=>{ if(!plan[t]) plan[t] = {}; });
+  if(!plan.events) plan.events = {};
+
+  function actualForMonth(m, type){
+    const d = new Date(year, m-1, 1);
+    const {start,end} = monthBounds(d);
+    return entriesInRange(start,end).filter(e=>catById(e.categoryId)?.type===type).reduce((s,e)=>s+e.amount,0);
+  }
+  function planRow(type){
+    let cells='', total=0;
+    for(let m=1;m<=12;m++){
+      const v = plan[type][m]||0; total+=v;
+      cells += `<td class="num"><input type="number" class="annual-plan-input" data-type="${type}" data-month="${m}" value="${v}"></td>`;
+    }
+    return {cells, total};
+  }
+  function actualRow(type){
+    let cells='', total=0;
+    for(let m=1;m<=12;m++){ const v=actualForMonth(m,type); total+=v; cells += `<td class="num">${won(v)}</td>`; }
+    return {cells, total};
+  }
+  const incP=planRow('income'), incA=actualRow('income');
+  const expP=planRow('expense'), expA=actualRow('expense');
+  const savP=planRow('saving'), savA=actualRow('saving');
+  const monthHeads = Array.from({length:12},(_,i)=>`<th>${i+1}월</th>`).join('');
+  const eventCells = Array.from({length:12},(_,i)=>{
+    const m=i+1;
+    const v = (plan.events[m]||'').toString();
+    return `<td><textarea class="annual-event-input autogrow" data-month="${m}" placeholder="이벤트" rows="1" style="width:80px;font-size:10px;">${escapeHtml(v)}</textarea></td>`;
+  }).join('');
+
+  const netPlan = incP.total - expP.total - savP.total;
+  const netActual = incA.total - expA.total - savA.total;
+
+  return `
+    <div class="monthnav">
+      <button id="yearPrev">‹</button>
+      <div class="m serif">${year}년 머니플랜</div>
+      <button id="yearNext">›</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:10px;">항목별 세부내역이 아닌 총액 기준이에요. 계획 칸에 숫자를 넣으면 그 달의 목표가 되고, 실제는 거래 기록에서 자동 집계돼요.</div>
+    <div class="card scrolltable">
+      <table class="budget">
+        <tr><th>구분</th>${monthHeads}<th>합계</th></tr>
+        <tr style="background:var(--gold-soft);"><td>이벤트메모</td>${eventCells}<td></td></tr>
+        <tr><td>수입 계획</td>${incP.cells}<td class="num" style="font-weight:700;">${won(incP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>수입 실제</td>${incA.cells}<td class="num" style="font-weight:700;color:var(--gold);">${won(incA.total)}</td></tr>
+        <tr><td>지출 계획</td>${expP.cells}<td class="num" style="font-weight:700;">${won(expP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>지출 실제</td>${expA.cells}<td class="num" style="font-weight:700;color:var(--rust);">${won(expA.total)}</td></tr>
+        <tr><td>저축 계획</td>${savP.cells}<td class="num" style="font-weight:700;">${won(savP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>저축 실제</td>${savA.cells}<td class="num" style="font-weight:700;color:var(--green);">${won(savA.total)}</td></tr>
+      </table>
+    </div>
+    <div class="summary-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="box"><div class="lbl">연간 순잔액(계획)</div><div class="val">${netPlan>=0?'+':'-'}${won(Math.abs(netPlan))}</div></div>
+      <div class="box"><div class="lbl">연간 순잔액(실제)</div><div class="val" style="color:${netActual>=0?'var(--green)':'var(--rust)'}">${netActual>=0?'+':'-'}${won(Math.abs(netActual))}</div></div>
+    </div>
+    ${eventDashboard(year)}
+  `;
+}
+
+function eventDashboard(year){
+  if(!data.annualEvents[year]) data.annualEvents[year] = [];
+  const events = data.annualEvents[year];
+  const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const rows = events.map(ev=>{
+    const actual = data.entries.filter(e=>e.eventId===ev.id).reduce((s,e)=>s+e.amount,0);
+    const diff = (ev.plannedAmount||0) - actual;
+    return `<div class="asset-row">
+      <span class="nm">${escapeHtml(ev.name)} <span style="color:var(--ink-soft);font-size:10px;">${ev.month?monthNames[ev.month-1]:'연중'}</span></span>
+      <input type="number" class="event-plan-input" data-id="${ev.id}" value="${ev.plannedAmount||0}" style="width:90px;">
+      <span class="diff" style="width:auto;margin:0 6px;">실제 ${won(actual)}</span>
+      <span class="diff ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</span>
+      <button class="rm-event" data-id="${ev.id}" style="background:none;border:none;color:var(--ink-soft);cursor:pointer;">✕</button>
+    </div>`;
+  }).join('');
+  const monthOpts = Array.from({length:12},(_,i)=>`<option value="${i+1}">${monthNames[i]}</option>`).join('');
+  return `
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이벤트 예산 대시보드</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">설 명절, 여행, 경조사처럼 특정 이벤트에 계획 금액을 걸어두고, 주간입력에서 거래를 추가할 때 이 이벤트로 태그하면 실제 지출이 자동으로 여기 집계돼요.</div>
+      <div class="catlist">${rows || '<div class="empty" style="padding:10px;">등록된 이벤트가 없어요</div>'}</div>
+      <div class="addcat-form" style="margin-top:10px;flex-wrap:wrap;">
+        <input id="newEventName" placeholder="이벤트 이름 (예: 설 명절)" style="flex:1;min-width:120px;">
+        <select id="newEventMonth">${monthOpts}</select>
+        <input id="newEventPlan" type="number" placeholder="계획 금액" style="width:100px;">
+        <button id="addEventBtn">추가</button>
+      </div>
+    </div>
+  `;
+}
+
+function shortRoadmapView(){
+  const year = roadmapYear;
+  if(!data.shortRoadmap[year]) data.shortRoadmap[year] = {items:[], plan:{}, actual:{}};
+  const rm = data.shortRoadmap[year];
+
+  function rowCells(itemId, kind){
+    let cells='', total=0;
+    for(let m=1;m<=12;m++){
+      const store = rm[kind];
+      if(!store[itemId]) store[itemId] = {};
+      const v = store[itemId][m]||0; total+=v;
+      cells += `<td class="num"><input type="number" class="rm-item-input" data-item="${itemId}" data-kind="${kind}" data-month="${m}" value="${v}"></td>`;
+    }
+    return {cells,total};
+  }
+  const monthHeads = Array.from({length:12},(_,i)=>`<th>${i+1}월</th>`).join('');
+
+  const planSection = rm.items.map(it=>{
+    const {cells,total} = rowCells(it.id,'plan');
+    return `<tr><td>${it.name}<button class="rm-item" data-id="${it.id}" style="margin-left:4px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">✕</button></td>${cells}<td class="num" style="font-weight:700;">${won(total)}</td></tr>`;
+  }).join('');
+  const actualSection = rm.items.map(it=>{
+    const {cells,total} = rowCells(it.id,'actual');
+    return `<tr><td>${it.name}</td>${cells}<td class="num" style="font-weight:700;">${won(total)}</td></tr>`;
+  }).join('');
+
+  const planTotal = rm.items.reduce((s,it)=>{ const store=rm.plan[it.id]||{}; return s+Object.values(store).reduce((a,b)=>a+(b||0),0); },0);
+  const actualTotal = rm.items.reduce((s,it)=>{ const store=rm.actual[it.id]||{}; return s+Object.values(store).reduce((a,b)=>a+(b||0),0); },0);
+  const rate = planTotal>0 ? Math.round(actualTotal/planTotal*100) : 0;
+
+  return `
+    <div class="monthnav">
+      <button id="yearPrev">‹</button>
+      <div class="m serif">${year}년 단기로드맵</div>
+      <button id="yearNext">›</button>
+    </div>
+    <div class="card">
+      <div class="itemrow-head">
+        <input id="newRmItem" placeholder="항목 이름 (예: 월급저축, 프로젝트 수익)">
+        <button id="addRmItem" style="background:var(--ink);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;">추가</button>
+      </div>
+    </div>
+    <div class="card scrolltable">
+      <div class="grouplabel">계획 · 연 목표 ${won(planTotal)}</div>
+      <table class="budget">
+        <tr><th>항목</th>${monthHeads}<th>합계</th></tr>
+        ${planSection || '<tr><td colspan="14" style="text-align:center;color:var(--ink-soft);">항목을 추가해보세요</td></tr>'}
+      </table>
+    </div>
+    <div class="card scrolltable">
+      <div class="grouplabel">실행 · 연 누적 ${won(actualTotal)} · 달성률 ${rate}%</div>
+      <table class="budget">
+        <tr><th>항목</th>${monthHeads}<th>합계</th></tr>
+        ${actualSection || '<tr><td colspan="14" style="text-align:center;color:var(--ink-soft);">항목을 추가해보세요</td></tr>'}
+      </table>
+    </div>
+  `;
+}
+
+function ensureLongRoadmap(){
+  if(!data.longRoadmap){
+    const startYear = new Date().getFullYear();
+    data.longRoadmap = {
+      startingAsset: 0,
+      years: [{id:uid(), year:startYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''}]
+    };
+  }
+}
+function computeLongRoadmapRows(){
+  ensureLongRoadmap();
+  const lr = data.longRoadmap;
+  let prevTotal = lr.startingAsset||0;
+  return lr.years.map((y,idx)=>{
+    const beginAsset = idx===0 ? (lr.startingAsset||0) : prevTotal;
+    const investable = beginAsset - (y.withdrawal||0);
+    const withSavings = investable + (y.savings||0);
+    const afterReturn = withSavings * (1 + (y.returnPct||0)/100);
+    prevTotal = afterReturn;
+    const grandTotal = afterReturn + (y.realEstate||0);
+    return {...y, beginAsset, investable, withSavings, afterReturn, grandTotal};
+  });
+}
+function longRoadmapView(){
+  ensureLongRoadmap();
+  const rows = computeLongRoadmapRows();
+  const CHUNK = 10;
+  const chunks = [];
+  for(let i=0;i<rows.length;i+=CHUNK) chunks.push(rows.slice(i,i+CHUNK));
+
+  function buildChunkTable(chunkRows, chunkIdx){
+    const yearHeads = chunkRows.map(r=>`<th><input type="number" class="ly-year-input" data-id="${r.id}" value="${r.year}" style="width:64px;text-align:center;font-weight:700;font-family:'Noto Serif KR',serif;border:1px solid var(--line);border-radius:4px;padding:3px;">
+      <button class="rm-year" data-id="${r.id}" style="display:block;margin:2px auto 0;border:none;background:none;color:var(--rust);font-size:10px;cursor:pointer;">✕삭제</button></th>`).join('');
+    function textRow(field, label, placeholder){
+      const cells = chunkRows.map(r=>`<td><textarea class="ly-input autogrow" data-id="${r.id}" data-field="${field}" placeholder="${placeholder||''}" rows="1" style="width:100px;">${escapeHtml(r[field]||'')}</textarea></td>`).join('');
+      return `<tr><td>${label}</td>${cells}</tr>`;
+    }
+    function numRow(field, label){
+      const cells = chunkRows.map(r=>`<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${r[field]||0}" style="width:86px;"></td>`).join('');
+      return `<tr><td>${label}</td>${cells}</tr>`;
+    }
+    function computedRow(label, key, color){
+      const cells = chunkRows.map(r=>`<td class="num" style="font-weight:700;color:var(--${color});white-space:nowrap;">${won(Math.round(r[key]))}</td>`).join('');
+      return `<tr><td>${label}</td>${cells}</tr>`;
+    }
+    const rangeLabel = chunkRows.length>1 ? `${chunkRows[0].year} ~ ${chunkRows[chunkRows.length-1].year}` : `${chunkRows[0].year}`;
+    return `
+      <div class="grouplabel" style="margin-top:16px;">구간 ${chunkIdx+1} · ${rangeLabel}</div>
+      <div class="card scrolltable">
+        <table class="budget">
+          <tr><th>연도</th>${yearHeads}</tr>
+          ${textRow('age','나이/메모','39세')}
+          ${textRow('lifeEvent','생애이슈','')}
+          ${numRow('withdrawal','지출/인출액')}
+          ${numRow('savings','연저축액')}
+          ${numRow('returnPct','기대수익률(%)')}
+          ${computedRow('연말 투자자산','afterReturn','green')}
+          ${numRow('realEstate','부동산등자산')}
+          ${computedRow('총자산합계','grandTotal','gold')}
+          ${textRow('lifePlan','라이프계획','')}
+          ${textRow('growthPlan','자산성장계획','')}
+        </table>
+      </div>
+    `;
+  }
+
+  const tables = chunks.map((c,i)=>buildChunkTable(c,i)).join('');
+
+  return `
+    <div class="card">
+      <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${data.longRoadmap.startingAsset||0}"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">첫 해 시작 자산이에요. 이후 해는 이전 해 연말 자산에서 자동으로 이어져요.</div>
+    </div>
+    ${tables}
+    <button id="addYearBtn" style="width:100%;padding:10px;border:1px dashed var(--line);border-radius:8px;background:none;color:var(--ink-soft);cursor:pointer;font-size:13px;margin-top:12px;">+ 연도 1개 추가</button>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <input type="number" id="bulkYearsCount" placeholder="예: 30" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
+      <button id="addYearsBulkBtn" style="background:var(--ink);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;white-space:nowrap;">몇 년치 한번에 추가</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">10년 단위로 표가 새로 생겨서 아래로 이어져요 (가로 스크롤이 무한정 길어지지 않아요). 마지막 연도 다음 해부터 이어서 추가되고, 연도 숫자는 표 맨 위 칸에서 언제든 직접 바꿀 수 있어요.</div>
+  `;
+}
+
+
+/* ---------- ASSET VIEW ---------- */
+function manwon(n){ return Math.round((n||0)/10000*10)/10 + '만'; }
+function assetMonKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function prevMonthKey(d){ const p = new Date(d.getFullYear(), d.getMonth()-1, 1); return assetMonKey(p); }
+
+function monthTotalFromSnapshot(snap){
+  if(!snap) return 0;
+  return data.assetItems.reduce((s,it)=>s+(snap[it.id]||0),0);
+}
+
+function assetTrendChart(){
+  const allKeys = Object.keys(data.assetSnapshots)
+    .filter(mk => data.assetSnapshots[mk] && Object.values(data.assetSnapshots[mk]).some(v=>v))
+    .sort();
+  if(allKeys.length < 2){
+    return `<div class="card" style="text-align:center;padding:24px 10px;color:var(--ink-soft);font-size:12px;">아직 기록이 1개월뿐이에요. 두 달 이상 쌓이면 총자산 추이 그래프가 여기 나타나요.</div>`;
+  }
+  const keys = assetChartRange==='recent' ? allKeys.slice(-12) : allKeys;
+  const values = keys.map(mk => monthTotalFromSnapshot(data.assetSnapshots[mk]));
+  const w = 900, h = 220, padL=64, padR=20, padT=20, padB=34;
+  const innerW = w-padL-padR, innerH = h-padT-padB;
+  const minV = Math.min(0, ...values);
+  const maxV = Math.max(...values) * 1.12 || 1;
+  const n = values.length;
+  const x = i => padL + (n===1?0:(i/(n-1))*innerW);
+  const y = v => padT + innerH - ((v-minV)/(maxV-minV||1))*innerH;
+  const points = values.map((v,i)=>({x:x(i), y:y(v), v}));
+  const linePath = points.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const areaPath = linePath + ` L${points[n-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L${points[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+
+  const gridLines = Array.from({length:4},(_,i)=>{
+    const frac = i/3;
+    const val = minV + (maxV-minV)*(1-frac);
+    const gy = padT + innerH*frac;
+    return `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${manwon(val)}</text>`;
+  }).join('');
+
+  const xLabels = points.map((p,i)=>{
+    if(n>8 && i% Math.ceil(n/8) !==0 && i!==n-1) return '';
+    const [yy,mm] = keys[i].split('-');
+    return `<text x="${p.x}" y="${h-10}" text-anchor="middle" font-size="10" fill="var(--ink-soft)">${yy.slice(2)}.${mm}</text>`;
+  }).join('');
+
+  const dots = points.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--green)" />`).join('');
+  const lastPoint = points[n-1];
+  const firstVal = values[0], lastVal = values[n-1];
+  const changeRate = firstVal!==0 ? ((lastVal-firstVal)/Math.abs(firstVal)*100) : 0;
+
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+        <h3 class="serif" style="margin:0;font-size:14px;">총자산 추이</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="asset-range-btn ${assetChartRange==='recent'?'active':''}" data-range="recent" style="font-size:10.5px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);background:${assetChartRange==='recent'?'var(--ink)':'none'};color:${assetChartRange==='recent'?'#fff':'var(--ink-soft)'};cursor:pointer;">최근 12개월</button>
+          <button class="asset-range-btn ${assetChartRange==='all'?'active':''}" data-range="all" style="font-size:10.5px;padding:3px 9px;border-radius:10px;border:1px solid var(--line);background:${assetChartRange==='all'?'var(--ink)':'none'};color:${assetChartRange==='all'?'#fff':'var(--ink-soft)'};cursor:pointer;">전체 기간</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:${lastVal-firstVal>=0?'var(--green)':'var(--rust)'};font-weight:700;margin-bottom:4px;">${keys[0]} → ${keys[keys.length-1]} ${lastVal-firstVal>=0?'+':''}${changeRate.toFixed(1)}%</div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
+        ${gridLines}
+        <path d="${areaPath}" fill="var(--green-soft)" opacity="0.6"/>
+        <path d="${linePath}" fill="none" stroke="var(--green)" stroke-width="2.5"/>
+        ${dots}
+        <circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="5" fill="var(--gold)" />
+        ${xLabels}
+      </svg>
+    </div>
+  `;
+}
+
+function assetView(){
+  const mk = assetMonKey(assetMonthRef);
+  const pmk = prevMonthKey(assetMonthRef);
+  if(!data.assetSnapshots[mk]) data.assetSnapshots[mk] = {};
+  const cur = data.assetSnapshots[mk];
+  const prev = data.assetSnapshots[pmk] || {};
+  const groups = [{key:'safe',label:'안전자산'},{key:'invest',label:'투자자산'},{key:'fixed',label:'비유동자산'}];
+
+  function rowsFor(g){
+    const hasPrevData = data.assetSnapshots[pmk] !== undefined;
+    return data.assetItems.filter(i=>i.group===g).map(it=>{
+      const curVal = cur[it.id]||0;
+      const prevVal = prev[it.id]||0;
+      const diff = curVal - prevVal;
+      const diffLabel = !hasPrevData ? '<span style="color:var(--ink-soft);font-weight:400;">신규</span>' : (diff===0 ? '-' : `${diff>0?'+':'-'}${won(Math.abs(diff))}`);
+      return `<div class="asset-row">
+        <span class="nm">${it.name}</span>
+        <input type="number" class="asset-input" data-id="${it.id}" value="${curVal}">
+        <span class="diff ${diff<0?'diff-over':'diff-under'}">${diffLabel}</span>
+        <button class="rm-asset" data-id="${it.id}" style="background:none;border:none;color:var(--ink-soft);cursor:pointer;">✕</button>
+      </div>`;
+    }).join('');
+  }
+  function subtotal(g){ return data.assetItems.filter(i=>i.group===g).reduce((s,i)=>s+(cur[i.id]||0),0); }
+  function prevSubtotal(g){ return data.assetItems.filter(i=>i.group===g).reduce((s,i)=>s+(prev[i.id]||0),0); }
+
+  const total = groups.reduce((s,g)=>s+subtotal(g.key),0);
+  const prevTotal = groups.reduce((s,g)=>s+prevSubtotal(g.key),0);
+  const changeRate = prevTotal>0 ? ((total-prevTotal)/prevTotal*100) : 0;
+
+  const fb = data.assetFeedback[mk] || '';
+
+  return `
+    <div class="monthnav">
+      <button id="assetPrev">‹</button>
+      <div class="m serif">${assetMonthRef.getFullYear()}년 ${assetMonthRef.getMonth()+1}월</div>
+      <button id="assetNext">›</button>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);">총자산 (전월대비)</div>
+      <div style="font-size:20px;font-weight:700;font-family:'Noto Serif KR',serif;">${won(total)}</div>
+      <div style="font-size:12px;color:${changeRate>=0?'var(--green)':'var(--rust)'};margin-top:2px;">${changeRate>=0?'+':''}${changeRate.toFixed(2)}% (${total-prevTotal>=0?'+':''}${won(total-prevTotal)})</div>
+    </div>
+    ${assetTrendChart()}
+    <div class="card">
+      <div class="asset-row" style="border-bottom:2px solid var(--line);font-weight:700;color:var(--ink-soft);font-size:10.5px;">
+        <span class="nm">항목</span>
+        <span style="width:100px;text-align:right;">이번달 금액</span>
+        <span class="diff">지난달대비</span>
+        <span style="width:16px;"></span>
+      </div>
+      ${groups.map(g=>`
+        <div class="asset-group-head">${g.label}</div>
+        ${rowsFor(g.key) || '<div style="font-size:11px;color:var(--ink-soft);padding:4px 0;">항목 없음</div>'}
+        <div class="asset-subtotal"><span>${g.label} 소계</span><span>${won(subtotal(g.key))}</span></div>
+      `).join('')}
+      <div class="addcat-form" style="margin-top:10px;">
+        <select id="newAssetGroup"><option value="safe">안전자산</option><option value="invest">투자자산</option><option value="fixed">비유동자산</option></select>
+        <input id="newAssetName" placeholder="새 항목 이름 (예: 청약저축)" style="flex:1;">
+        <button id="addAssetBtn">추가</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번달 총평 · 피드백</h3>
+      <textarea class="feedback" id="asset-fb" style="min-height:110px;" placeholder="이번달 자산 증감 이유, 잘한 점, 다음달 계획 등을 자유롭게 적어보세요">${fb}</textarea>
+    </div>
+  `;
+}
+
+/* ---------- PROJECT VIEW ---------- */
+function parseISO(s){ if(!s) return null; const d = new Date(s+'T00:00:00'); return isNaN(d.getTime())?null:d; }
+function toISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function monthsBetween(a,b){
+  let m = (b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth());
+  if(b.getDate() < a.getDate()) m--;
+  return Math.max(0,m);
+}
+function migrateProjects(){
+  data.projects.forEach(p=>{
+    if(p.code===undefined) p.code = p.name || '';
+    if(p.nameKr===undefined) p.nameKr = p.name || '';
+    if(p.nameEn===undefined) p.nameEn = '';
+    if(!p.startDate){
+      const now = new Date();
+      const day = p.dayOfMonth || 1;
+      p.startDate = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(Math.min(day,28)).padStart(2,'0');
+    }
+    if(!p.endDate){
+      const sd = parseISO(p.startDate);
+      sd.setFullYear(sd.getFullYear()+1);
+      p.endDate = toISO(sd);
+    }
+    if(p.rate1==null){
+      p.rate1 = (p.interestAmount && p.principal) ? Math.round((p.interestAmount*12/p.principal)*10000)/10000 : 0;
+    }
+    delete p.dayOfMonth; delete p.interestAmount; delete p.termText;
+  });
+}
+function getRefDate(){
+  return data.projectRefDate ? parseISO(data.projectRefDate) : new Date(new Date().toDateString());
+}
+function computeProject(p, refDate){
+  const start = parseISO(p.startDate);
+  const end = parseISO(p.endDate);
+  const principal = p.principal||0;
+  const rate1 = p.rate1||0;
+  const rate2eff = (p.rate2!=null && p.rate2!=='') ? p.rate2 : rate1;
+  const rate3eff = (p.rate3!=null && p.rate3!=='') ? p.rate3 : rate2eff;
+  if(!start || !end){
+    return {status:'날짜입력필요', appliedRate:0, monthlyIncome:0, annualIncome:0, cumulativeInterest:0, totalMaturity:0, termMonths:0, ddayToMaturity:null, settlementDay:''};
+  }
+  if(end < start){
+    return {status:'날짜 확인!', appliedRate:0, monthlyIncome:0, annualIncome:0, cumulativeInterest:0, totalMaturity:0, termMonths:0, ddayToMaturity:null, settlementDay:'매월 '+start.getDate()+'일'};
+  }
+  const termMonths = monthsBetween(start,end);
+  let status;
+  if(refDate < start) status = '투자전';
+  else if(refDate >= end) status = '만기완료';
+  else status = '운용중';
+
+  let appliedRate;
+  if(refDate < start){ appliedRate = rate1; }
+  else{
+    const capped = refDate>end ? end : refDate;
+    const elapsedForTier = monthsBetween(start, capped);
+    const tier = Math.min(Math.floor(elapsedForTier/12),2);
+    appliedRate = tier===0 ? rate1 : (tier===1 ? rate2eff : rate3eff);
+  }
+  const monthlyIncome = principal*appliedRate/12;
+  const annualIncome = principal*appliedRate;
+  const settlementDay = '매월 '+start.getDate()+'일';
+  const ddayToMaturity = Math.round((end - refDate)/86400000);
+
+  const elapsedCapped = refDate<start ? 0 : Math.min(monthsBetween(start, refDate>end?end:refDate), termMonths);
+  const cumulativeInterest = principal*( rate1*Math.min(elapsedCapped,12) + rate2eff*Math.min(Math.max(elapsedCapped-12,0),12) + rate3eff*Math.max(elapsedCapped-24,0) )/12;
+  const totalMaturity = principal*( rate1*Math.min(termMonths,12) + rate2eff*Math.min(Math.max(termMonths-12,0),12) + rate3eff*Math.max(termMonths-24,0) )/12;
+
+  return {status, appliedRate, monthlyIncome, annualIncome, cumulativeInterest, totalMaturity, termMonths, ddayToMaturity, settlementDay};
+}
+
+function projectView(){
+  migrateProjects();
+  return `
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="rtabbtn ${projectSubTab==='calendar'?'active':''}" data-ptab="calendar">캘린더</button>
+      <button class="rtabbtn ${projectSubTab==='list'?'active':''}" data-ptab="list">프로젝트 목록</button>
+    </div>
+    ${projectSubTab==='calendar' ? projectCalendarView() : projectListView()}
+  `;
+}
+
+function projectListView(){
+  const refDate = getRefDate();
+  const computed = data.projects.map(p=>({p, c:computeProject(p, refDate)}));
+  const active = computed.filter(x=>x.c.status==='운용중');
+  const totalPrincipal = active.reduce((s,x)=>s+(x.p.principal||0),0);
+  const avgRate = totalPrincipal>0 ? active.reduce((s,x)=>s+x.c.annualIncome,0)/totalPrincipal : 0;
+  const monthlyTotal = active.reduce((s,x)=>s+x.c.monthlyIncome,0);
+  const annualTotal = active.reduce((s,x)=>s+x.c.annualIncome,0);
+  const cumTotal = active.reduce((s,x)=>s+x.c.cumulativeInterest,0);
+  const maturityTotal = active.reduce((s,x)=>s+x.c.totalMaturity,0);
+  const countActive = active.length;
+  const countMatured = computed.filter(x=>x.c.status==='만기완료').length;
+
+  const rows = computed.map(({p,c})=>`
+    <div class="card" style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div style="font-weight:700;font-size:13px;">${p.nameKr||p.code||'(이름없음)'} <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">${p.code||''}</span></div>
+          <div style="font-size:10.5px;color:var(--ink-soft);">${p.nameEn||''}</div>
+        </div>
+        <button class="rm-project" data-id="${p.id}" style="background:none;border:none;color:var(--rust);cursor:pointer;">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <input type="text" class="proj-field" data-id="${p.id}" data-field="code" value="${(p.code||'').replace(/"/g,'&quot;')}" placeholder="프로젝트번호" style="width:90px;">
+        <input type="text" class="proj-field" data-id="${p.id}" data-field="nameKr" value="${(p.nameKr||'').replace(/"/g,'&quot;')}" placeholder="국문명" style="width:110px;">
+        <input type="text" class="proj-field" data-id="${p.id}" data-field="nameEn" value="${(p.nameEn||'').replace(/"/g,'&quot;')}" placeholder="영문명" style="width:110px;">
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <input type="number" class="proj-field" data-id="${p.id}" data-field="principal" value="${p.principal||0}" placeholder="투자원금" style="width:100px;">
+        <input type="date" class="proj-field" data-id="${p.id}" data-field="startDate" value="${p.startDate||''}" style="width:130px;">
+        <input type="date" class="proj-field" data-id="${p.id}" data-field="endDate" value="${p.endDate||''}" style="width:130px;">
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <input type="number" step="0.001" class="proj-field" data-id="${p.id}" data-field="rate1" value="${p.rate1!=null?p.rate1:0}" placeholder="1년차%" style="width:70px;" title="1년차 수익률 (예: 0.15 = 15%)">
+        <input type="number" step="0.001" class="proj-field" data-id="${p.id}" data-field="rate2" value="${p.rate2!=null?p.rate2:''}" placeholder="2년차%" style="width:70px;">
+        <input type="number" step="0.001" class="proj-field" data-id="${p.id}" data-field="rate3" value="${p.rate3!=null?p.rate3:''}" placeholder="3년차%" style="width:70px;">
+        <input type="text" class="proj-field" data-id="${p.id}" data-field="note" value="${(p.note||'').replace(/"/g,'&quot;')}" placeholder="메모" style="flex:1;min-width:90px;">
+      </div>
+      <div style="border-top:1px dashed var(--line);padding-top:6px;font-size:11px;display:flex;flex-wrap:wrap;gap:8px;color:var(--ink-soft);">
+        <span style="font-weight:700;color:${c.status==='운용중'?'var(--green)':c.status==='만기완료'?'var(--ink-soft)':'var(--gold)'};">${c.status}</span>
+        <span>적용수익률 ${(c.appliedRate*100).toFixed(1)}%</span>
+        <span>월수익금 ${won(Math.round(c.monthlyIncome))}</span>
+        <span>${c.settlementDay}</span>
+        ${c.ddayToMaturity!=null?`<span>만기 D${c.ddayToMaturity>=0?'-':'+'}${Math.abs(c.ddayToMaturity)}</span>`:''}
+        <span>누적이자 ${won(Math.round(c.cumulativeInterest))}</span>
+        <span>만기총수익 ${won(Math.round(c.totalMaturity))}</span>
+      </div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="card">
+      <div class="yfield"><label>기준일</label><input type="date" id="projRefDate" value="${toISO(refDate)}"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">비워두면 오늘 날짜 기준. 아래 요약과 적용수익률은 이 날짜 기준으로 계산돼요.</div>
+    </div>
+    <div class="summary-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="box"><div class="lbl">운용중 원금합계</div><div class="val">${won(totalPrincipal)}</div></div>
+      <div class="box"><div class="lbl">평균 수익률</div><div class="val">${(avgRate*100).toFixed(2)}%</div></div>
+      <div class="box"><div class="lbl">월 수익금 합계</div><div class="val" style="color:var(--gold);">${won(Math.round(monthlyTotal))}</div></div>
+      <div class="box"><div class="lbl">연 환산 수익금</div><div class="val" style="color:var(--gold);">${won(Math.round(annualTotal))}</div></div>
+      <div class="box"><div class="lbl">누적 이자수익</div><div class="val" style="color:var(--green);">${won(Math.round(cumTotal))}</div></div>
+      <div class="box"><div class="lbl">만기까지 총수익</div><div class="val" style="color:var(--green);">${won(Math.round(maturityTotal))}</div></div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">운용중 ${countActive}건 · 만기완료 ${countMatured}건 (요약은 운용중 기준)</div>
+
+    <div class="card">
+      <div class="itemrow-head">
+        <input id="newProjName" placeholder="새 프로젝트 이름(국문)">
+        <button id="addProjBtn" style="background:var(--ink);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;">추가</button>
+      </div>
+    </div>
+    ${rows || '<div class="card empty">등록된 프로젝트가 없어요</div>'}
+  `;
+}
+
+function projectCalendarView(){
+  const refDate = getRefDate();
+  const year = projectMonthRef.getFullYear();
+  const month = projectMonthRef.getMonth(); // 0-indexed
+  const mk = year+'-'+String(month+1).padStart(2,'0');
+  if(!data.projectReceipts[mk]) data.projectReceipts[mk] = {};
+  const receipts = data.projectReceipts[mk];
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+
+  const computed = data.projects.map(p=>({p, c:computeProject(p, refDate)}));
+  const activeProjects = computed.filter(x=>x.c.status==='운용중').map(x=>({
+    id:x.p.id, name:x.p.nameKr||x.p.code, day: parseISO(x.p.startDate)?parseISO(x.p.startDate).getDate():null, amount:x.c.monthlyIncome
+  })).filter(x=>x.day);
+
+  let expectedTotal = 0, receivedTotal = 0;
+  activeProjects.forEach(p=>{
+    if(p.day<=daysInMonth){
+      expectedTotal += p.amount||0;
+      const r = receipts[p.id];
+      if(r && r.received) receivedTotal += (r.amount!=null?r.amount:(p.amount||0));
+    }
+  });
+
+  let cells = [];
+  for(let i=0;i<firstWeekday;i++) cells.push('<div class="calday blank"></div>');
+  for(let day=1;day<=daysInMonth;day++){
+    const projsToday = activeProjects.filter(p=>p.day===day);
+    const chips = projsToday.map(p=>{
+      const r = receipts[p.id];
+      const received = r && r.received;
+      return `<div class="projchip ${received?'received':''}" data-pid="${p.id}" title="${p.name}">${p.name.slice(0,6)} ${manwon(p.amount||0)}</div>`;
+    }).join('');
+    cells.push(`<div class="calday">
+      <div class="dnum">${day}</div>
+      ${chips}
+    </div>`);
+  }
+  while(cells.length % 7 !== 0) cells.push('<div class="calday blank"></div>');
+
+  let gridHtml = '';
+  for(let i=0;i<cells.length;i+=7){
+    gridHtml += cells.slice(i,i+7).join('');
+    const weekDays = [];
+    for(let d=i-firstWeekday+1; d<i-firstWeekday+8; d++){ if(d>=1 && d<=daysInMonth) weekDays.push(d); }
+    const weekTotal = activeProjects.filter(p=>weekDays.includes(p.day)).reduce((s,p)=>s+(p.amount||0),0);
+    if(weekDays.length>0){
+      gridHtml += `<div class="weeksub">이번주 예정 ${won(Math.round(weekTotal))}</div>`;
+    }
+  }
+
+  return `
+    <div class="monthnav">
+      <button id="projPrev">‹</button>
+      <div class="m serif">${year}년 ${month+1}월</div>
+      <button id="projNext">›</button>
+    </div>
+    <div class="summary-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="box"><div class="lbl">예정 수익금</div><div class="val" style="color:var(--gold);">${won(Math.round(expectedTotal))}</div></div>
+      <div class="box"><div class="lbl">입금 확인됨</div><div class="val" style="color:var(--green);">${won(Math.round(receivedTotal))}</div></div>
+    </div>
+    <div class="card">
+      <div class="calhead"><div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div></div>
+      <div class="calgrid">${gridHtml}</div>
+      <div style="font-size:10px;color:var(--ink-soft);margin-top:8px;">칩을 누르면 입금 완료 표시가 돼요 (운용중 프로젝트만 표시)</div>
+    </div>
+  `;
+}
+
+/* ---------- SEARCH VIEW ---------- */
+function renderSearchResults(keyword, catId){
+  let list = data.entries.slice().sort((a,b)=> b.date.localeCompare(a.date));
+  if(catId) list = list.filter(e=>e.categoryId===catId);
+  if(keyword) list = list.filter(e=> (e.item||'').includes(keyword) || (catById(e.categoryId)?.name||'').includes(keyword));
+  if(list.length===0) return '<div class="empty">일치하는 기록이 없어요</div>';
+  const total = list.reduce((s,e)=>s+e.amount,0);
+  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">${list.length}건 · 합계 ${won(total)}</div>` +
+    list.map(e=>{
+      const c = catById(e.categoryId);
+      return `<div class="result-item"><span>${c?c.name:'?'} ${e.item?('· '+e.item):''}</span><span><span class="dt">${e.date}</span> ${won(e.amount)}</span></div>`;
+    }).join('');
+}
+function searchView(){
+  const opts = data.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  return `
+    <div class="searchbox">
+      <input id="searchInput" placeholder="품목 또는 카테고리로 검색">
+      <select id="searchCat"><option value="">전체</option>${opts}</select>
+    </div>
+    <div id="searchResults">${renderSearchResults('','')}</div>
+  `;
+}
+
+/* ---------- CATEGORY SETTINGS VIEW ---------- */
+function tagLabel(c){
+  const sub = (c.subtype||'variable')==='fixed' ? '고정' : '변동';
+  if(c.type==='expense') return sub+'지출';
+  if(c.type==='income') return sub+'수입';
+  return sub+'저축';
+}
+function tagClass(c){
+  return (c.subtype||'variable')==='fixed' ? 'fixed' : 'variable';
+}
+function catView(){
+  const rows = data.categories.map(c=>`
+    <div class="catrow">
+      <span class="tag ${tagClass(c)}">${tagLabel(c)}</span>
+      <span class="nm">${c.name}</span>
+      ${(c.subtype||'variable')==='variable' ? `<input type="number" class="cat-week-input" data-cid="${c.id}" value="${c.weeklyBudget!=null?c.weeklyBudget:Math.round((c.budget||0)/4.345)}" placeholder="기본주예산" title="새 주에 기본으로 채워질 주예산">` : ''}
+      <input type="number" class="cat-budget-input" data-cid="${c.id}" value="${c.budget||0}" placeholder="월예산" title="월예산">
+      <button class="rm" data-cid="${c.id}">✕</button>
+    </div>
+  `).join('');
+  return `
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">카테고리 &amp; 예산</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">여기 숫자는 "새로 만나는 주/달에 기본으로 채워지는 값"이에요. 이미 확인한 과거 주/달은 그때 고정된 값을 계속 유지하니, 여기를 바꿔도 과거 통계는 변하지 않아요.</div>
+      <div class="catlist">${rows}</div>
+      <div class="addcat-form">
+        <select id="newCatType">
+          <option value="expense">지출</option>
+          <option value="income">수입</option>
+          <option value="saving">저축</option>
+        </select>
+        <select id="newCatSubtype"><option value="variable">변동</option><option value="fixed">고정</option></select>
+        <input id="newCatName" placeholder="새 카테고리 이름" style="flex:1;">
+        <button id="addCatBtn">추가</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">데이터 백업</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:10px;">이 앱의 모든 기록(거래내역, 예산, 로드맵, 자산, 프로젝트 전부)을 파일 하나로 내려받아요. 기기가 고장 나거나 브라우저 데이터가 지워져도, 이 파일만 있으면 완전히 복구할 수 있어요. <b>한 달에 한 번 정도, 내려받은 파일을 구글드라이브나 이메일에 보관</b>해두는 걸 추천해요.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="exportBackupBtn" style="flex:1;min-width:140px;background:var(--green);color:#fff;border:none;border-radius:6px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">백업 파일 내려받기</button>
+        <button id="importBackupBtn" style="flex:1;min-width:140px;background:none;border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;cursor:pointer;">백업 파일 불러오기</button>
+        <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+      </div>
+      <div style="font-size:10px;color:var(--rust);margin-top:8px;">⚠ 불러오기를 하면 지금 이 기기에 있는 데이터를 백업파일 내용으로 완전히 덮어써요.</div>
+    </div>
+    ${firebaseEnabled && fbUser ? `
+    <div class="card">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">계정</h3>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;">${fbUser.email}로 로그인됨 · 이 계정으로 다른 기기에서 로그인하면 같은 데이터가 보여요</div>
+      <button id="logoutBtn" style="background:none;border:1px solid var(--line);border-radius:6px;padding:8px 14px;font-size:12.5px;cursor:pointer;color:var(--rust);">로그아웃</button>
+    </div>` : ''}
+  `;
+}
+
+/* ---------- ADD ENTRY MODAL ---------- */
+function openAddModal(dateISO, presetCatId){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  const catOpts = data.categories.map(c=>`<option value="${c.id}" ${c.id===presetCatId?'selected':''}>${c.name}</option>`).join('');
+  const year = dateISO.slice(0,4);
+  const events = data.annualEvents[year] || [];
+  const eventOpts = `<option value="">이벤트 태그 없음</option>` + events.map(ev=>`<option value="${ev.id}">${escapeHtml(ev.name)}</option>`).join('');
+  wrap.innerHTML = `
+    <div class="modal">
+      <h3 class="serif">${dateISO} 기록 추가</h3>
+      <div class="row"><select id="m-cat">${catOpts}</select></div>
+      <div class="row"><input id="m-item" placeholder="품목 (예: 점심 김밥)"></div>
+      <div class="row"><input id="m-amt" type="number" placeholder="금액"></div>
+      <div class="row"><select id="m-event">${eventOpts}</select></div>
+      <div class="actions">
+        <button class="cancel" id="m-cancel">취소</button>
+        <button class="primary" id="m-save">저장</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('m-cancel').onclick = ()=> wrap.remove();
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  document.getElementById('m-save').onclick = async ()=>{
+    const categoryId = document.getElementById('m-cat').value;
+    const item = document.getElementById('m-item').value.trim();
+    const amount = parseInt(document.getElementById('m-amt').value)||0;
+    const eventId = document.getElementById('m-event').value || null;
+    if(amount<=0){ alert('금액을 입력해주세요'); return; }
+    data.entries.push({id:uid(), date:dateISO, categoryId, item, amount, eventId});
+    await save();
+    wrap.remove();
+    render();
+  };
+}
+
+function openAddBudgetModal(dateISO){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  const varCats = data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='variable');
+  const catOpts = varCats.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  wrap.innerHTML = `
+    <div class="modal">
+      <h3 class="serif">${dateISO} 예산 넣기</h3>
+      <div class="row"><select id="b-cat">${catOpts || '<option value="">변동지출 카테고리가 없어요</option>'}</select></div>
+      <div class="row"><input id="b-amt" type="number" placeholder="이 날 쓸 예산 금액"></div>
+      <div class="actions">
+        <button class="cancel" id="b-cancel">취소</button>
+        <button class="primary" id="b-save">저장</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('b-cancel').onclick = ()=> wrap.remove();
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  document.getElementById('b-save').onclick = async ()=>{
+    const categoryId = document.getElementById('b-cat').value;
+    const amount = parseInt(document.getElementById('b-amt').value)||0;
+    if(!categoryId){ alert('카테고리를 먼저 만들어주세요'); return; }
+    if(amount<=0){ alert('금액을 입력해주세요'); return; }
+    if(!data.dailyCategoryBudgets[dateISO]) data.dailyCategoryBudgets[dateISO] = {};
+    data.dailyCategoryBudgets[dateISO][categoryId] = amount;
+    await save();
+    wrap.remove();
+    render();
+  };
+}
+
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '가계부-백업-'+isoDate(new Date())+'.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  data.lastBackupDate = isoDate(new Date());
+  save();
+  render();
+}
+function daysSinceLastBackup(){
+  if(!data.lastBackupDate) return Infinity;
+  const d = new Date(data.lastBackupDate+'T00:00:00');
+  return Math.floor((new Date() - d)/86400000);
+}
+function importBackup(file){
+  const reader = new FileReader();
+  reader.onload = async (ev)=>{
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      if(!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.categories)){
+        alert('올바른 백업 파일이 아닌 것 같아요.');
+        return;
+      }
+      if(!confirm('백업 파일을 불러오면 지금 이 기기의 데이터를 덮어씁니다. 계속할까요?')) return;
+      data = parsed;
+      if(!data.lastBackupDate) data.lastBackupDate = isoDate(new Date());
+      await save();
+      render();
+      alert('불러오기 완료했어요.');
+    }catch(err){
+      alert('파일을 읽을 수 없어요: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderLoginScreen(errMsg){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="login-wrap">
+      <h1 class="serif" style="margin-bottom:4px;color:var(--brand);">머니저널</h1>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:18px;">이메일로 로그인하면 PC·모바일 어디서든 같은 기록을 볼 수 있어요</div>
+      <div class="err">${errMsg||''}</div>
+      <input type="email" id="login-email" placeholder="이메일">
+      <input type="password" id="login-pw" placeholder="비밀번호 (6자 이상)">
+      <button class="primary" id="login-btn">로그인</button>
+      <button class="secondary" id="signup-btn">처음이에요 · 계정 만들기</button>
+    </div>
+  `;
+  document.getElementById('login-btn').onclick = async ()=>{
+    const email = document.getElementById('login-email').value.trim();
+    const pw = document.getElementById('login-pw').value;
+    try{ await fbAuth.signInWithEmailAndPassword(email, pw); }
+    catch(e){ renderLoginScreen(loginErrorText(e)); }
+  };
+  document.getElementById('signup-btn').onclick = async ()=>{
+    const email = document.getElementById('login-email').value.trim();
+    const pw = document.getElementById('login-pw').value;
+    try{ await fbAuth.createUserWithEmailAndPassword(email, pw); }
+    catch(e){ renderLoginScreen(loginErrorText(e)); }
+  };
+}
+function loginErrorText(e){
+  const code = e && e.code || '';
+  if(code.includes('invalid-email')) return '이메일 형식을 확인해주세요.';
+  if(code.includes('user-not-found')) return '가입된 계정이 없어요. "계정 만들기"를 눌러주세요.';
+  if(code.includes('wrong-password')) return '비밀번호가 맞지 않아요.';
+  if(code.includes('email-already-in-use')) return '이미 가입된 이메일이에요. 로그인해주세요.';
+  if(code.includes('weak-password')) return '비밀번호는 6자 이상이어야 해요.';
+  return '문제가 발생했어요: ' + (e && e.message || '');
+}
+
+if(initFirebase()){
+  fbAuth.onAuthStateChanged(async (user)=>{
+    if(user){ fbUser = user; await load(); }
+    else { fbUser = null; renderLoginScreen(); }
+  });
+} else {
+  load();
+}
+</script>
+</body>
+</html>
