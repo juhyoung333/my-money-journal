@@ -8,8 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
-<style>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script><style>
   :root{
     --paper:#FAF5EC;
     --paper-card:#FFFFFF;
@@ -81,12 +80,22 @@
   .bar-fill{ height:100%; background:var(--green); }
   .bar-fill.over{ background:var(--rust); }
 
-  textarea.feedback{ width:100%; font-family:inherit; font-size:12.5px; border:1px solid var(--line); border-radius:6px; padding:8px; resize:vertical; min-height:50px; background:#fff; }
+  textarea.feedback{ width:100%; font-family:inherit; font-size:12.5px; border:1px solid var(--line); border-radius:6px; padding:8px; resize:none; overflow:hidden; min-height:50px; background:#fff; line-height:1.5; }
   label.flabel{ font-size:11.5px; font-weight:700; color:var(--ink-soft); display:block; margin:10px 0 4px; }
 
   .stampwrap{ position:relative; }
   .feedback-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:6px; }
   .feedback-grid .flabel{ margin:0 0 4px; }
+  .history-toggle{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .history-toggle summary{ cursor:pointer; font-weight:700; font-size:13px; list-style:none; display:flex; align-items:center; gap:6px; }
+  .history-toggle summary::-webkit-details-marker{ display:none; }
+  .history-toggle summary::before{ content:'▸'; color:var(--ink-soft); transition:transform .15s; }
+  .history-toggle[open] summary::before{ transform:rotate(90deg); }
+  .history-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; border-bottom:1px solid var(--line); padding:10px 2px; cursor:pointer; }
+  .history-row:hover{ background:#FBF8F1; }
+  .history-row .hr-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); white-space:nowrap; flex-shrink:0; width:88px; }
+  .history-row .hr-text{ font-size:12px; flex:1; }
+  .history-row .hr-badge{ font-size:9.5px; padding:2px 6px; border-radius:10px; white-space:nowrap; }
   .stamp{
     position:absolute; top:-6px; right:6px; width:78px; height:78px; border-radius:50%;
     border:2.5px dashed var(--green); color:var(--green); display:flex; align-items:center; justify-content:center;
@@ -94,8 +103,8 @@
     transform:rotate(-14deg); opacity:.88; pointer-events:none;
   }
 
-  .modal-bg{ position:fixed; inset:0; background:rgba(35,35,35,.4); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
-  .modal{ background:var(--paper-card); width:100%; max-width:760px; border-radius:14px 14px 0 0; padding:18px 16px 24px; }
+  .modal-bg{ position:fixed; inset:0; background:rgba(35,35,35,.45); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+  .modal{ background:var(--paper-card); width:100%; max-width:420px; border-radius:14px; padding:20px 18px 22px; box-shadow:0 12px 40px rgba(0,0,0,.25); max-height:90vh; overflow-y:auto; }
   .modal h3{ margin:0 0 10px; font-size:15px; }
   .modal .row{ display:flex; gap:8px; margin-bottom:8px; }
   .modal select, .modal input{ width:100%; padding:8px; font-size:13px; border:1px solid var(--line); border-radius:6px; font-family:inherit; background:#fff; }
@@ -133,9 +142,14 @@
 
   .rtabbtn{ background:var(--paper-card); border:1px solid var(--line); border-radius:6px; padding:7px 11px; font-size:12px; cursor:pointer; font-family:inherit; color:var(--ink-soft); }
   .rtabbtn.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:700; }
+  .rm-mode-btn{ background:var(--paper-card); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; font-family:inherit; color:var(--ink-soft); }
+  .rm-mode-btn.active{ background:var(--ink); color:#fff; border-color:var(--ink); font-weight:700; }
   .narrow-view{ margin:0 auto; }
   .card-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; align-items:start; }
   .card-grid .full{ grid-column:1/-1; }
+  /* the week view's feedback card is a normal (non-full) grid item placed last in the
+     markup, so on wide screens where 4 columns fit, it naturally lands in the 4th
+     (rightmost) slot next to the 3 summary cards instead of leaving that slot empty. */
   textarea.autogrow{ resize:none; overflow:hidden; font-family:inherit; border:1px solid var(--line); border-radius:3px; padding:2px 4px; line-height:1.35; }
   .scrolltable{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .scrolltable table{ min-width:640px; }
@@ -224,6 +238,7 @@ let refDate = new Date();
 let monthRef = new Date();
 let roadmapSubTab = 'annual';
 let roadmapYear = new Date().getFullYear();
+let shortRoadmapMode = 'separate'; // 'separate' (월별 입력표) | 'combined' (항목별 달성률 요약)
 let assetMonthRef = new Date();
 let projectSubTab = 'calendar';
 let projectMonthRef = new Date();
@@ -269,7 +284,7 @@ function uid(){ return Math.random().toString(36).slice(2,10); }
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function autoGrow(el){ el.style.height='auto'; el.style.height=(el.scrollHeight)+'px'; }
 function initAutoGrow(){
-  document.querySelectorAll('textarea.autogrow').forEach(el=>{
+  document.querySelectorAll('textarea.autogrow, textarea.feedback').forEach(el=>{
     autoGrow(el);
     el.oninput = ()=> autoGrow(el);
   });
@@ -400,6 +415,20 @@ function entriesInRange(startISO, endISO){
   return data.entries.filter(e=> e.date >= startISO && e.date <= endISO);
 }
 
+function catWeeklyDefault(c, wk){
+  const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
+  return override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
+}
+function dailyBudgetValue(dateISO, c){
+  const stored = data.dailyCategoryBudgets[dateISO] && data.dailyCategoryBudgets[dateISO][c.id];
+  return stored!=null ? stored : 0;
+}
+function weeklyBudgetFromDaily(c, wk, dayISOs){
+  const anySet = dayISOs.some(d => data.dailyCategoryBudgets[d] && data.dailyCategoryBudgets[d][c.id]!=null);
+  if(!anySet) return catWeeklyDefault(c, wk);
+  return dayISOs.reduce((s,d)=>s+dailyBudgetValue(d,c),0);
+}
+
 function render(){
   const app = document.getElementById('app');
   const overdue = data.entries.length>0 && daysSinceLastBackup() >= 30;
@@ -442,6 +471,33 @@ function render(){
 }
 
 /* ---------- WEEK VIEW ---------- */
+function weekFeedbackHistory(currentWk){
+  const keys = Object.keys(data.feedback).filter(wk=>{
+    const fb = data.feedback[wk];
+    return fb && ((fb.total&&fb.total.trim()) || (fb.best&&fb.best.trim()) || (fb.worst&&fb.worst.trim()) || (fb.next&&fb.next.trim()));
+  }).sort().reverse();
+  if(keys.length===0) return '';
+  const rows = keys.map(wk=>{
+    const fb = data.feedback[wk];
+    const mon = new Date(wk+'T00:00:00');
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    const label = `${mon.getMonth()+1}/${mon.getDate()}~${sun.getMonth()+1}/${sun.getDate()}`;
+    const preview = fb.total || fb.best || fb.worst || fb.next || '';
+    const badge = fb.nextAchieved===true ? '<span class="hr-badge" style="background:var(--green-soft);color:var(--green);">목표달성</span>' : (fb.nextAchieved===false ? '<span class="hr-badge" style="background:var(--rust-soft);color:var(--rust);">목표미달</span>' : '');
+    return `<div class="history-row goto-week" data-wk="${wk}">
+      <span class="hr-label">${label}</span>
+      <span class="hr-text">${escapeHtml(preview).slice(0,60)}</span>
+      ${badge}
+    </div>`;
+  }).join('');
+  return `
+    <details class="history-toggle full">
+      <summary>지난 주간 피드백 모아보기 (${keys.length}개)</summary>
+      <div style="margin-top:8px;max-height:320px;overflow-y:auto;">${rows}</div>
+    </details>
+  `;
+}
+
 function weekView(){
   const {mon, sun} = getWeekRange(refDate);
   const wk = weekKey(mon);
@@ -462,19 +518,6 @@ function weekView(){
   const rangeEntries = entriesInRange(wkStart, wkEnd);
   const dayISOs = days.map(isoDate);
   const wkVarCats = data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='variable');
-  function catWeeklyDefault(c){
-    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
-    return override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
-  }
-  function dailyBudgetValue(dateISO, c){
-    const stored = data.dailyCategoryBudgets[dateISO] && data.dailyCategoryBudgets[dateISO][c.id];
-    return stored!=null ? stored : 0;
-  }
-  function weeklyBudgetFromDaily(c){
-    const anySet = dayISOs.some(d => data.dailyCategoryBudgets[d] && data.dailyCategoryBudgets[d][c.id]!=null);
-    if(!anySet) return catWeeklyDefault(c);
-    return dayISOs.reduce((s,d)=>s+dailyBudgetValue(d,c),0);
-  }
 
   let daysHtml = days.map((d,i)=>{
     const diso = isoDate(d);
@@ -509,7 +552,7 @@ function weekView(){
   function wkRowsFor(list){
     return list.map(c=>{
       const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
-      const weeklyBudget = weeklyBudgetFromDaily(c);
+      const weeklyBudget = weeklyBudgetFromDaily(c, wk, dayISOs);
       const diff = weeklyBudget - spent;
       const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
       return `<tr>
@@ -526,8 +569,7 @@ function weekView(){
   function inflowRowsFor(list){
     return list.map(c=>{
       const spent = rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
-      const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
-      const weeklyBudget = override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345));
+      const weeklyBudget = catWeeklyDefault(c, wk);
       const diff = spent - weeklyBudget;
       const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
       return `<tr>
@@ -543,19 +585,13 @@ function weekView(){
   const incomeCats = data.categories.filter(c=>c.type==='income' && (c.subtype||'variable')==='variable');
   const incomeRows = inflowRowsFor(incomeCats);
   const incomeWeekTotal = rangeEntries.filter(e=>incomeCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
-  const incomeWeekBudget = incomeCats.reduce((s,c)=>{
-    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
-    return s + (override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345)));
-  },0);
+  const incomeWeekBudget = incomeCats.reduce((s,c)=> s + catWeeklyDefault(c, wk), 0);
 
   // saving/investing this week (budget vs actual) - variable only
   const savingCats = data.categories.filter(c=>c.type==='saving' && (c.subtype||'variable')==='variable');
   const savingRows = inflowRowsFor(savingCats);
   const savingWeekTotal = rangeEntries.filter(e=>savingCats.some(c=>c.id===e.categoryId)).reduce((s,e)=>s+e.amount,0);
-  const savingWeekBudget = savingCats.reduce((s,c)=>{
-    const override = data.weeklyBudgets[wk] && data.weeklyBudgets[wk][c.id];
-    return s + (override!=null ? override : (c.weeklyBudget!=null ? c.weeklyBudget : Math.round((c.budget||0)/4.345)));
-  },0);
+  const savingWeekBudget = savingCats.reduce((s,c)=> s + catWeeklyDefault(c, wk), 0);
 
   // fixed items (expense + income + saving) that only happen once a month — checklist style
   const wkFixedCats = data.categories.filter(c=>(c.subtype||'variable')==='fixed');
@@ -595,7 +631,7 @@ function weekView(){
     </div>
     <div class="daysrow full">${daysHtml}</div>
 
-    <div class="card">
+    <div class="card wk-card-budget">
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번 주 변동지출 예산 대비</h3>
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">위 요일 카드에서 넣은 예산이 자동으로 합산돼요. 아직 안 넣었다면 기존 기본값이 표시돼요.</div>
       <table class="budget">
@@ -603,12 +639,12 @@ function weekView(){
         ${budgetRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">카테고리 설정에서 예산을 등록해보세요</td></tr>'}
       </table>
     </div>
-    <div class="card">
+    <div class="card wk-card-fixed">
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번달 고정 항목 (월 1회)</h3>
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">근로소득, 월급저축, 청약저축처럼 한 달에 한 번 일어나는 항목 — 발생일에 기록하면 자동으로 체크돼요</div>
       <div class="catlist">${fixedRows || '<div class="empty" style="padding:10px;">고정 항목이 없어요</div>'}</div>
     </div>
-    <div class="card">
+    <div class="card wk-card-flow">
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번 주 변동 수입 · 저축 (예상 대비)</h3>
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">매주 금액이 바뀌는 항목만 표시돼요 (근로소득 등 월 1회 항목은 고정 항목 체크리스트 참고). 오차가 (-)면 예상보다 덜 들어온 거예요.</div>
       <div class="grouplabel">수입 · 예상 ${won(incomeWeekBudget)} / 실제 ${won(incomeWeekTotal)}</div>
@@ -622,7 +658,7 @@ function weekView(){
         ${savingRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">변동 저축 카테고리가 없어요</td></tr>'}
       </table>
     </div>
-    <div class="card stampwrap full">
+    <div class="card wk-card-feedback stampwrap">
       ${stamped?'<div class="stamp">정산<br>완료</div>':''}
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">주간 피드백</h3>
       <div class="feedback-grid">
@@ -799,6 +835,10 @@ function bindTabEvents(){
   // roadmap sub-tab switch
   document.querySelectorAll('.rtabbtn').forEach(b=>{
     b.onclick = ()=>{ roadmapSubTab = b.dataset.rtab; render(); };
+  });
+  // short roadmap: 월별 입력표 / 항목별 달성률 요약 전환
+  document.querySelectorAll('.rm-mode-btn').forEach(b=>{
+    b.onclick = ()=>{ shortRoadmapMode = b.dataset.rmmode; render(); };
   });
   const yearPrev = document.getElementById('yearPrev');
   const yearNext = document.getElementById('yearNext');
@@ -1301,18 +1341,29 @@ function shortRoadmapView(){
   const actualTotal = rm.items.reduce((s,it)=>{ const store=rm.actual[it.id]||{}; return s+Object.values(store).reduce((a,b)=>a+(b||0),0); },0);
   const rate = planTotal>0 ? Math.round(actualTotal/planTotal*100) : 0;
 
-  return `
-    <div class="monthnav">
-      <button id="yearPrev">‹</button>
-      <div class="m serif">${year}년 단기로드맵</div>
-      <button id="yearNext">›</button>
-    </div>
-    <div class="card">
-      <div class="itemrow-head">
-        <input id="newRmItem" placeholder="항목 이름 (예: 월급저축, 프로젝트 수익)">
-        <button id="addRmItem" style="background:var(--ink);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;">추가</button>
-      </div>
-    </div>
+  // per-item achievement rate (계획 대비 실행) — the wide 12개월 표만 있으면 항목이 늘어날수록
+  // 개별 달성률을 한눈에 보기 어려워서, 항목별로 압축해서 보는 요약 모드를 추가
+  const summaryRows = rm.items.map(it=>{
+    const planSum = Object.values(rm.plan[it.id]||{}).reduce((a,b)=>a+(b||0),0);
+    const actualSum = Object.values(rm.actual[it.id]||{}).reduce((a,b)=>a+(b||0),0);
+    const itemRate = planSum>0 ? Math.round(actualSum/planSum*100) : (actualSum>0?100:0);
+    const pct = Math.min(100, itemRate);
+    return `<tr>
+      <td>${it.name}<button class="rm-item" data-id="${it.id}" style="margin-left:4px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">✕</button></td>
+      <td class="num">${won(planSum)}</td>
+      <td class="num">${won(actualSum)}</td>
+      <td class="num" style="font-weight:700;color:${itemRate>=100?'var(--green)':(itemRate>=60?'var(--ink)':'var(--rust)')};">${itemRate}%</td>
+    </tr>
+    <tr><td colspan="4" style="padding-top:0;border-bottom:1px solid var(--line);"><div class="bar-bg"><div class="bar-fill ${itemRate<60?'over':''}" style="width:${pct}%"></div></div></td></tr>`;
+  }).join('');
+
+  const modeToggle = `
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button class="rm-mode-btn ${shortRoadmapMode==='separate'?'active':''}" data-rmmode="separate">월별 입력 (계획·실행 따로)</button>
+      <button class="rm-mode-btn ${shortRoadmapMode==='combined'?'active':''}" data-rmmode="combined">항목별 달성률 요약 (합쳐보기)</button>
+    </div>`;
+
+  const detailTables = `
     <div class="card scrolltable">
       <div class="grouplabel">계획 · 연 목표 ${won(planTotal)}</div>
       <table class="budget">
@@ -1326,7 +1377,31 @@ function shortRoadmapView(){
         <tr><th>항목</th>${monthHeads}<th>합계</th></tr>
         ${actualSection || '<tr><td colspan="14" style="text-align:center;color:var(--ink-soft);">항목을 추가해보세요</td></tr>'}
       </table>
+    </div>`;
+
+  const summaryTable = `
+    <div class="card">
+      <div class="grouplabel">항목별 목표 달성률 · 계획 ${won(planTotal)} / 실행 ${won(actualTotal)} · 전체 ${rate}%</div>
+      <table class="budget">
+        <tr><th>항목</th><th class="num">연간계획</th><th class="num">연간실행</th><th class="num">달성률</th></tr>
+        ${summaryRows || '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">항목을 추가해보세요</td></tr>'}
+      </table>
+    </div>`;
+
+  return `
+    <div class="monthnav">
+      <button id="yearPrev">‹</button>
+      <div class="m serif">${year}년 단기로드맵</div>
+      <button id="yearNext">›</button>
     </div>
+    <div class="card">
+      <div class="itemrow-head">
+        <input id="newRmItem" placeholder="항목 이름 (예: 월급저축, 프로젝트 수익)">
+        <button id="addRmItem" style="background:var(--ink);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;">추가</button>
+      </div>
+    </div>
+    ${modeToggle}
+    ${shortRoadmapMode==='combined' ? summaryTable : detailTables}
   `;
 }
 
@@ -1353,6 +1428,53 @@ function computeLongRoadmapRows(){
     return {...y, beginAsset, investable, withSavings, afterReturn, grandTotal};
   });
 }
+function longRoadmapGrowthChart(rows){
+  if(rows.length < 2) return '';
+  const w = 900, h = 220, padL=70, padR=20, padT=20, padB=30;
+  const innerW = w-padL-padR, innerH = h-padT-padB;
+  const totals = rows.map(r=>r.grandTotal);
+  const investOnly = rows.map(r=>r.afterReturn);
+  const maxV = Math.max(...totals) * 1.08 || 1;
+  const minV = 0;
+  const n = rows.length;
+  const x = i => padL + (n===1?0:(i/(n-1))*innerW);
+  const y = v => padT + innerH - ((v-minV)/(maxV-minV||1))*innerH;
+  const totalPts = totals.map((v,i)=>({x:x(i),y:y(v)}));
+  const investPts = investOnly.map((v,i)=>({x:x(i),y:y(v)}));
+  const totalPath = totalPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const investPath = investPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const areaPath = totalPath + ` L${totalPts[n-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L${totalPts[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+
+  const gridLines = Array.from({length:4},(_,i)=>{
+    const frac = i/3;
+    const val = minV + (maxV-minV)*(1-frac);
+    const gy = padT + innerH*frac;
+    return `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${manwon(val)}</text>`;
+  }).join('');
+  const step = n>10 ? Math.ceil(n/10) : 1;
+  const xLabels = rows.map((r,i)=>{
+    if(i%step!==0 && i!==n-1) return '';
+    return `<text x="${x(i)}" y="${h-8}" text-anchor="middle" font-size="10" fill="var(--ink-soft)">${r.year}</text>`;
+  }).join('');
+
+  return `
+    <div class="card full">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+        <h3 class="serif" style="margin:0;font-size:14px;">자산 성장 그래프</h3>
+        <div style="font-size:10.5px;color:var(--ink-soft);">굵은 선: 총자산(투자+부동산) · 얇은 선: 투자자산만</div>
+      </div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
+        ${gridLines}
+        <path d="${areaPath}" fill="var(--gold-soft)" opacity="0.5"/>
+        <path d="${totalPath}" fill="none" stroke="var(--gold)" stroke-width="2.5"/>
+        <path d="${investPath}" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4,3"/>
+        ${xLabels}
+      </svg>
+    </div>
+  `;
+}
+
 function longRoadmapView(){
   ensureLongRoadmap();
   const rows = computeLongRoadmapRows();
@@ -1403,6 +1525,7 @@ function longRoadmapView(){
       <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${data.longRoadmap.startingAsset||0}"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">첫 해 시작 자산이에요. 이후 해는 이전 해 연말 자산에서 자동으로 이어져요.</div>
     </div>
+    ${longRoadmapGrowthChart(rows)}
     ${tables}
     <button id="addYearBtn" style="width:100%;padding:10px;border:1px dashed var(--line);border-radius:8px;background:none;color:var(--ink-soft);cursor:pointer;font-size:13px;margin-top:12px;">+ 연도 1개 추가</button>
     <div style="display:flex;gap:6px;margin-top:8px;">
