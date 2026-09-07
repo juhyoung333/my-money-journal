@@ -23,6 +23,10 @@
     --rust-soft:#FFE9E9;
     --gold:#FFA726;
     --gold-soft:#FFF2DC;
+    --purple:#8B5CF6;
+    --purple-soft:#EDE9FE;
+    --blue:#4F8EF7;
+    --blue-soft:#E8F0FE;
   }
   *{box-sizing:border-box;}
   body{
@@ -102,6 +106,11 @@
     text-align:center; font-family:'Noto Serif KR',serif; font-weight:700; font-size:11px; line-height:1.25;
     transform:rotate(-14deg); opacity:.88; pointer-events:none;
   }
+
+  /* long roadmap achievement icons */
+  .ly-icon-select{ display:block; width:100%; margin-top:5px; font-size:9.5px; padding:2px 3px; border:1px solid var(--line); border-radius:4px; font-family:inherit; background:#fff; color:var(--ink-soft); }
+  .ly-icon-legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .ly-icon-legend .li-item{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft); }
 
   .modal-bg{ position:fixed; inset:0; background:rgba(35,35,35,.45); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
   .modal{ background:var(--paper-card); width:100%; max-width:420px; border-radius:14px; padding:20px 18px 22px; box-shadow:0 12px 40px rgba(0,0,0,.25); max-height:90vh; overflow-y:auto; }
@@ -932,7 +941,7 @@ function bindTabEvents(){
     ensureLongRoadmap();
     const years = data.longRoadmap.years;
     const lastYear = years.length ? years[years.length-1].year : new Date().getFullYear();
-    years.push({id:uid(), year:lastYear+1, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''});
+    years.push({id:uid(), year:lastYear+1, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''});
     await save(); render();
   };
   const addYearsBulkBtn = document.getElementById('addYearsBulkBtn');
@@ -944,7 +953,7 @@ function bindTabEvents(){
     let lastYear = years.length ? years[years.length-1].year : new Date().getFullYear();
     for(let i=0;i<count;i++){
       lastYear++;
-      years.push({id:uid(), year:lastYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''});
+      years.push({id:uid(), year:lastYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''});
     }
     await save(); render();
   };
@@ -969,6 +978,14 @@ function bindTabEvents(){
       const field = inp.dataset.field;
       const numeric = ['withdrawal','savings','returnPct','realEstate'].includes(field);
       y[field] = numeric ? (parseFloat(inp.value)||0) : inp.value;
+      await save(); render();
+    };
+  });
+  document.querySelectorAll('.ly-icon-select').forEach(sel=>{
+    sel.onchange = async ()=>{
+      const y = data.longRoadmap.years.find(x=>x.id===sel.dataset.id);
+      if(!y) return;
+      y.icon = sel.value;
       await save(); render();
     };
   });
@@ -1402,12 +1419,44 @@ function shortRoadmapView(){
   `;
 }
 
+// achievement icons that can be pinned to a specific year in the long-term roadmap
+const LR_ICONS = {
+  house:    {label:'집 (내 집 마련)',   color:'gold',   path:`<path d="M4 12.5L12 5l8 7.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 11V20h11v-9" fill="none" stroke-linejoin="round"/><rect x="10" y="14.5" width="4" height="5.5" fill="none"/>`},
+  building: {label:'빌딩 (창업·이직)',  color:'purple', path:`<rect x="5" y="3" width="14" height="18" rx="1" fill="none"/><rect x="7.5" y="6" width="2" height="2" fill="currentColor" stroke="none"/><rect x="11" y="6" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14.5" y="6" width="2" height="2" fill="currentColor" stroke="none"/><rect x="7.5" y="10" width="2" height="2" fill="currentColor" stroke="none"/><rect x="11" y="10" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14.5" y="10" width="2" height="2" fill="currentColor" stroke="none"/><rect x="7.5" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="14.5" y="14" width="2" height="2" fill="currentColor" stroke="none"/><rect x="10.5" y="17.3" width="3" height="3.7" fill="none"/>`},
+  ring:     {label:'결혼',              color:'brand',  path:`<circle cx="12" cy="15" r="5.5" fill="none"/><polygon points="9,9 12,4 15,9 12,11" fill="none" stroke-linejoin="round"/>`},
+  baby:     {label:'출산·육아',         color:'brand',  path:`<circle cx="12" cy="7" r="3.2" fill="none"/><path d="M6.5 20c0-4.5 2.5-7.5 5.5-7.5s5.5 3 5.5 7.5" fill="none" stroke-linecap="round"/>`},
+  grad:     {label:'학업·자격증',       color:'blue',   path:`<polygon points="12,4 22,9 12,14 2,9" fill="none" stroke-linejoin="round"/><path d="M6.5 11v4.5c0 1.6 2.8 3 5.5 3s5.5-1.4 5.5-3V11" fill="none" stroke-linecap="round"/><line x1="22" y1="9" x2="22" y2="15.5" stroke-linecap="round"/>`},
+  plane:    {label:'유학·이주·여행',    color:'blue',   path:`<path d="M3 12.5L21 4L14.5 21L11.5 13L3 12.5Z" fill="none" stroke-linejoin="round" stroke-linecap="round"/><line x1="11.5" y1="13" x2="21" y2="4"/>`},
+  star:     {label:'목표 달성',         color:'green',  path:`<polygon points="12,3 14.7,9.3 21.5,9.9 16.3,14.3 17.9,21 12,17.3 6.1,21 7.7,14.3 2.5,9.9 9.3,9.3" fill="none" stroke-linejoin="round"/>`},
+  flag:     {label:'은퇴·전환점',       color:'green',  path:`<line x1="5.5" y1="3" x2="5.5" y2="21" stroke-linecap="round"/><path d="M5.5 4.5H18L14 8.5L18 12.5H5.5" fill="none" stroke-linejoin="round"/>`},
+};
+function lrIconInnerSvg(key, size){
+  const ic = LR_ICONS[key];
+  if(!ic) return '';
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" stroke="currentColor" stroke-width="1.7" fill="none">${ic.path}</svg>`;
+}
+function lrIconBadge(key, size){
+  size = size || 30;
+  const ic = LR_ICONS[key];
+  if(!ic){
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;border:1.5px dashed var(--line);margin:0 auto;"></div>`;
+  }
+  return `<div title="${ic.label}" style="width:${size}px;height:${size}px;border-radius:50%;background:var(--${ic.color}-soft);color:var(--${ic.color});border:1.5px solid var(--${ic.color});display:flex;align-items:center;justify-content:center;margin:0 auto;">${lrIconInnerSvg(key, Math.round(size*0.58))}</div>`;
+}
+function lrIconOptions(selected){
+  return `<option value="">상징 없음</option>` + Object.keys(LR_ICONS).map(k=>`<option value="${k}" ${selected===k?'selected':''}>${LR_ICONS[k].label}</option>`).join('');
+}
+function lrIconLegend(){
+  const items = Object.keys(LR_ICONS).map(k=>`<div class="li-item">${lrIconBadge(k,22)}<span>${LR_ICONS[k].label}</span></div>`).join('');
+  return `<div class="ly-icon-legend">${items}</div>`;
+}
+
 function ensureLongRoadmap(){
   if(!data.longRoadmap){
     const startYear = new Date().getFullYear();
     data.longRoadmap = {
       startingAsset: 0,
-      years: [{id:uid(), year:startYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:''}]
+      years: [{id:uid(), year:startYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''}]
     };
   }
 }
@@ -1455,11 +1504,25 @@ function longRoadmapGrowthChart(rows){
     return `<text x="${x(i)}" y="${h-8}" text-anchor="middle" font-size="10" fill="var(--ink-soft)">${r.year}</text>`;
   }).join('');
 
+  // achievement stamps: pinned on the total-asset line for any year the user tagged with an icon
+  const iconRad = 11;
+  const iconMarkers = rows.map((r,i)=>{
+    if(!r.icon || !LR_ICONS[r.icon]) return '';
+    const ic = LR_ICONS[r.icon];
+    const cx = totalPts[i].x, cy = totalPts[i].y;
+    const s = (iconRad*1.22/24);
+    return `<g color="var(--${ic.color})">
+      <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${iconRad}" fill="var(--paper-card)" stroke="var(--${ic.color})" stroke-width="1.6"/>
+      <g transform="translate(${(cx-iconRad*0.61).toFixed(1)},${(cy-iconRad*0.61).toFixed(1)}) scale(${s.toFixed(3)})" stroke="currentColor" stroke-width="1.8" fill="none">${ic.path}</g>
+      <text x="${cx.toFixed(1)}" y="${(cy-iconRad-4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="var(--${ic.color})">${r.year}</text>
+    </g>`;
+  }).join('');
+
   return `
     <div class="card full">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
         <h3 class="serif" style="margin:0;font-size:14px;">자산 성장 그래프</h3>
-        <div style="font-size:10.5px;color:var(--ink-soft);">굵은 선: 총자산(투자+부동산) · 얇은 선: 투자자산만</div>
+        <div style="font-size:10.5px;color:var(--ink-soft);">굵은 선: 총자산(투자+부동산) · 얇은 선: 투자자산만 · 표에서 상징을 고르면 이 그래프 위에 도장처럼 표시돼요</div>
       </div>
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
         ${gridLines}
@@ -1467,6 +1530,7 @@ function longRoadmapGrowthChart(rows){
         <path d="${totalPath}" fill="none" stroke="var(--gold)" stroke-width="2.5"/>
         <path d="${investPath}" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4,3"/>
         ${xLabels}
+        ${iconMarkers}
       </svg>
     </div>
   `;
@@ -1480,8 +1544,11 @@ function longRoadmapView(){
   for(let i=0;i<rows.length;i+=CHUNK) chunks.push(rows.slice(i,i+CHUNK));
 
   function buildChunkTable(chunkRows, chunkIdx){
-    const yearHeads = chunkRows.map(r=>`<th><input type="number" class="ly-year-input" data-id="${r.id}" value="${r.year}" style="width:64px;text-align:center;font-weight:700;font-family:'Noto Serif KR',serif;border:1px solid var(--line);border-radius:4px;padding:3px;">
-      <button class="rm-year" data-id="${r.id}" style="display:block;margin:2px auto 0;border:none;background:none;color:var(--rust);font-size:10px;cursor:pointer;">✕삭제</button></th>`).join('');
+    const yearHeads = chunkRows.map(r=>`<th>
+      ${lrIconBadge(r.icon, 30)}
+      <input type="number" class="ly-year-input" data-id="${r.id}" value="${r.year}" style="width:64px;text-align:center;font-weight:700;font-family:'Noto Serif KR',serif;border:1px solid var(--line);border-radius:4px;padding:3px;margin-top:4px;">
+      <select class="ly-icon-select" data-id="${r.id}">${lrIconOptions(r.icon)}</select>
+      <button class="rm-year" data-id="${r.id}" style="display:block;margin:3px auto 0;border:none;background:none;color:var(--rust);font-size:10px;cursor:pointer;">✕삭제</button></th>`).join('');
     function textRow(field, label, placeholder){
       const cells = chunkRows.map(r=>`<td><textarea class="ly-input autogrow" data-id="${r.id}" data-field="${field}" placeholder="${placeholder||''}" rows="1" style="width:100px;">${escapeHtml(r[field]||'')}</textarea></td>`).join('');
       return `<tr><td>${label}</td>${cells}</tr>`;
@@ -1521,6 +1588,9 @@ function longRoadmapView(){
     <div class="card">
       <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${data.longRoadmap.startingAsset||0}"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">첫 해 시작 자산이에요. 이후 해는 이전 해 연말 자산에서 자동으로 이어져요.</div>
+      <div class="grouplabel" style="margin-top:12px;">연도별 상징 아이콘</div>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:2px;">아래 표에서 연도마다 상징을 골라두면, 그 해가 도장처럼 표시돼요 (내 집 마련, 결혼, 승진 등 인생의 이정표를 자유롭게 남겨보세요)</div>
+      ${lrIconLegend()}
     </div>
     ${longRoadmapGrowthChart(rows)}
     ${tables}
