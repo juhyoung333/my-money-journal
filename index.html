@@ -321,7 +321,13 @@ function applyMigrationsAndDefaults(){
   if(!data.categories || data.categories.length===0) data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
 }
 
+// A failed read used to fall into the catch block below and reset+overwrite the user's
+// real data with blank defaults — a single transient network/auth hiccup on page load
+// (very plausible right after a big write, like restoring a backup) could silently wipe
+// everything. Now a read failure just falls back to whatever's in the local mirror
+// (see save()) instead of ever auto-saving empty defaults over existing data.
 async function load(){
+  let loadError = null;
   try{
     if(firebaseEnabled && fbUser){
       const snap = await fbDb.ref('users/'+fbUser.uid+'/data').get();
@@ -337,13 +343,37 @@ async function load(){
       else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
     }
   }catch(e){
-    data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
-    data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
-    await save();
+    loadError = e;
+    console.error('load failed, trying local backup mirror', e);
+    // don't touch `data` with fresh defaults here — try the local safety-net mirror first
+    // (save() always writes one, even when Firebase/window.storage is the primary store)
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY+'-mirror');
+      if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
+      else {
+        // truly nothing anywhere — this really is a first run, safe to init defaults
+        data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
+        data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
+      }
+    }catch(e2){
+      data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
+      data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
+    }
   }
   render();
+  if(loadError){
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;background:var(--rust);color:#fff;font-size:12px;padding:10px 14px;text-align:center;z-index:100;';
+    banner.textContent = '⚠ 최신 데이터를 불러오지 못해 임시 저장본을 표시하고 있어요. 인터넷 연결을 확인하고 새로고침해주세요.';
+    document.body.appendChild(banner);
+  }
 }
+// Always mirrors the latest data into localStorage, even when Firebase/window.storage is
+// the primary store — this is the safety net load() falls back to if a read ever fails,
+// and it's how we detect (and surface) a write that silently didn't reach the primary
+// store instead of pretending everything was saved.
 async function save(){
+  try{ localStorage.setItem(STORAGE_KEY+'-mirror', JSON.stringify(data)); }catch(e){ /* best-effort */ }
   try{
     if(firebaseEnabled && fbUser){
       await fbDb.ref('users/'+fbUser.uid+'/data').set(data);
@@ -352,8 +382,12 @@ async function save(){
     } else {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
+    return true;
   }
-  catch(e){ console.error('save failed', e); }
+  catch(e){
+    console.error('save failed', e);
+    return false;
+  }
 }
 
 function getWeekRange(d){
@@ -798,6 +832,25 @@ function bindTabEvents(){
       await save(); render();
     };
   });
+  document.querySelectorAll('.next-month-budget-input').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const nmk = nextMonthKey(monthRef);
+      if(!data.monthlyBudgets[nmk]) data.monthlyBudgets[nmk] = {};
+      data.monthlyBudgets[nmk][inp.dataset.cid] = parseInt(inp.value)||0;
+      await save(); render();
+    };
+  });
+  const copyToNextMonthBtn = document.getElementById('copyToNextMonthBtn');
+  if(copyToNextMonthBtn) copyToNextMonthBtn.onclick = async ()=>{
+    const mk = monKey(monthRef);
+    const nmk = nextMonthKey(monthRef);
+    if(!data.monthlyBudgets[nmk]) data.monthlyBudgets[nmk] = {};
+    const curBudgets = data.monthlyBudgets[mk] || {};
+    data.categories.forEach(c=>{
+      data.monthlyBudgets[nmk][c.id] = curBudgets[c.id]!==undefined ? curBudgets[c.id] : (c.budget||0);
+    });
+    await save(); render();
+  };
   document.querySelectorAll('.rm').forEach(b=>{
     b.onclick = async ()=>{
       if(!confirm('이 카테고리를 삭제할까요? 관련 기록은 남아있어요.')) return;
@@ -936,12 +989,11 @@ function bindTabEvents(){
     data.longRoadmap.startingAsset = parseInt(lrStart.value)||0;
     await save(); render();
   };
-  const addYearBtn = document.getElementById('addYearBtn');
-  if(addYearBtn) addYearBtn.onclick = async ()=>{
+  const lrBirthYear = document.getElementById('lr-birthyear');
+  if(lrBirthYear) lrBirthYear.onchange = async ()=>{
     ensureLongRoadmap();
-    const years = data.longRoadmap.years;
-    const lastYear = years.length ? years[years.length-1].year : new Date().getFullYear();
-    years.push({id:uid(), year:lastYear+1, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''});
+    const v = parseInt(lrBirthYear.value);
+    data.longRoadmap.birthYear = isNaN(v) ? null : v;
     await save(); render();
   };
   const addYearsBulkBtn = document.getElementById('addYearsBulkBtn');
@@ -957,20 +1009,6 @@ function bindTabEvents(){
     }
     await save(); render();
   };
-  document.querySelectorAll('.rm-year').forEach(b=>{
-    b.onclick = async ()=>{
-      data.longRoadmap.years = data.longRoadmap.years.filter(y=>y.id!==b.dataset.id);
-      await save(); render();
-    };
-  });
-  document.querySelectorAll('.ly-year-input').forEach(inp=>{
-    inp.onchange = async ()=>{
-      const y = data.longRoadmap.years.find(x=>x.id===inp.dataset.id);
-      if(!y) return;
-      y.year = parseInt(inp.value)||y.year;
-      await save(); render();
-    };
-  });
   document.querySelectorAll('.ly-input').forEach(inp=>{
     inp.onchange = async ()=>{
       const y = data.longRoadmap.years.find(x=>x.id===inp.dataset.id);
@@ -1211,6 +1249,53 @@ function monthView(){
         <div><label class="flabel">다음달 반영사항</label><textarea class="feedback" id="mfb-next" placeholder="다음달 예산에 반영할 것">${mfb.next}</textarea></div>
       </div>
     </div>
+    ${nextMonthBudgetSection(mk)}
+    </div>
+  `;
+}
+
+// lets the user finish this month's settlement and set up next month's budget in the
+// same place, instead of having to go change the category defaults in 설정. Anything
+// entered here is written straight into data.monthlyBudgets[다음달] (an override that
+// applies only to that month), so it's live the moment they navigate to next month —
+// no separate "apply" step, consistent with every other budget input in this app.
+function nextMonthBudgetSection(mk){
+  const nmk = nextMonthKey(monthRef);
+  if(!data.monthlyBudgets[nmk]) data.monthlyBudgets[nmk] = {};
+  const nextBudgets = data.monthlyBudgets[nmk];
+  const curBudgets = data.monthlyBudgets[mk] || {};
+  function curEffective(c){ return curBudgets[c.id]!==undefined ? curBudgets[c.id] : (c.budget||0); }
+  function nextVal(c){ return nextBudgets[c.id]!==undefined ? nextBudgets[c.id] : curEffective(c); }
+
+  function groupRows(list){
+    if(list.length===0) return '<div style="font-size:11px;color:var(--ink-soft);padding:4px 0;">항목 없음</div>';
+    return list.map(c=>`
+      <div class="catrow">
+        <span class="tag ${tagClass(c)}">${tagLabel(c)}</span>
+        <span class="nm">${c.name}</span>
+        <span style="font-size:10.5px;color:var(--ink-soft);width:76px;text-align:right;">이번달 ${won(curEffective(c))}</span>
+        <input type="number" class="next-month-budget-input" data-cid="${c.id}" value="${nextVal(c)}" style="width:88px;">
+      </div>`).join('');
+  }
+  const groups = [
+    {label:'수입', list:data.categories.filter(c=>c.type==='income')},
+    {label:'고정지출', list:data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='fixed')},
+    {label:'변동지출', list:data.categories.filter(c=>c.type==='expense' && (c.subtype||'variable')==='variable')},
+    {label:'저축·투자', list:data.categories.filter(c=>c.type==='saving')},
+  ];
+  const [ny, nm] = nmk.split('-');
+
+  return `
+    <div class="card full">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+        <h3 class="serif" style="margin:0;font-size:14px;">${ny}년 ${parseInt(nm)}월 예산 준비</h3>
+        <button id="copyToNextMonthBtn" style="background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:11.5px;cursor:pointer;color:var(--ink-soft);">이번달과 동일하게 맞추기</button>
+      </div>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">월말 정산을 마치면서 여기서 바로 다음달 예산을 정리해보세요. 설정 탭을 거치지 않고 바로 ${ny}년 ${parseInt(nm)}월 예산으로 반영되고, 값을 바꾸면 그 자리에서 저장돼요.</div>
+      ${groups.map(g=>`
+        <div class="grouplabel">${g.label}</div>
+        <div class="catlist" style="margin-bottom:8px;">${groupRows(g.list)}</div>
+      `).join('')}
     </div>
   `;
 }
@@ -1453,16 +1538,56 @@ function lrIconLegend(){
 
 function ensureLongRoadmap(){
   if(!data.longRoadmap){
-    const startYear = new Date().getFullYear();
     data.longRoadmap = {
       startingAsset: 0,
-      years: [{id:uid(), year:startYear, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''}]
+      birthYear: null,
+      windowStartYear: null,
+      years: []
     };
   }
+  if(syncLongRoadmapWindow()) save();
 }
-function computeLongRoadmapRows(){
-  ensureLongRoadmap();
+
+// keeps the long-term roadmap anchored to "this year": drops rows for years that
+// have already passed, rolls the starting-asset figure forward so the projection
+// stays continuous, and tops the table back up to a full 40-year span.
+function syncLongRoadmapWindow(){
   const lr = data.longRoadmap;
+  const nowYear = new Date().getFullYear();
+  const WINDOW = 40;
+  let changed = false;
+
+  if(lr.windowStartYear !== nowYear){
+    if(lr.years.some(y=>y.year < nowYear)){
+      const oldRows = computeLongRoadmapRows();
+      const newFirst = oldRows.find(r=>r.year===nowYear);
+      if(newFirst){
+        lr.startingAsset = Math.round(newFirst.beginAsset);
+      } else {
+        const pastRows = oldRows.filter(r=>r.year<nowYear).sort((a,b)=>b.year-a.year);
+        if(pastRows[0]) lr.startingAsset = Math.round(pastRows[0].afterReturn);
+      }
+    }
+    lr.years = lr.years.filter(y=>y.year >= nowYear);
+    lr.windowStartYear = nowYear;
+    changed = true;
+  }
+
+  lr.years.sort((a,b)=>a.year-b.year);
+  const existingYears = new Set(lr.years.map(y=>y.year));
+  for(let y=nowYear; y<nowYear+WINDOW; y++){
+    if(!existingYears.has(y)){
+      lr.years.push({id:uid(), year:y, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''});
+      changed = true;
+    }
+  }
+  if(changed) lr.years.sort((a,b)=>a.year-b.year);
+  return changed;
+}
+
+function computeLongRoadmapRows(){
+  const lr = data.longRoadmap;
+  if(!lr) return [];
   let prevTotal = lr.startingAsset||0;
   return lr.years.map((y,idx)=>{
     const beginAsset = idx===0 ? (lr.startingAsset||0) : prevTotal;
@@ -1542,16 +1667,25 @@ function longRoadmapView(){
   const CHUNK = 10;
   const chunks = [];
   for(let i=0;i<rows.length;i+=CHUNK) chunks.push(rows.slice(i,i+CHUNK));
+  const lr = data.longRoadmap;
+  const nowYear = new Date().getFullYear();
 
   function buildChunkTable(chunkRows, chunkIdx){
     const yearHeads = chunkRows.map(r=>`<th>
       ${lrIconBadge(r.icon, 30)}
-      <input type="number" class="ly-year-input" data-id="${r.id}" value="${r.year}" style="width:64px;text-align:center;font-weight:700;font-family:'Noto Serif KR',serif;border:1px solid var(--line);border-radius:4px;padding:3px;margin-top:4px;">
+      <div style="font-weight:700;font-family:'Noto Serif KR',serif;font-size:14px;margin-top:4px;">${r.year}${r.year===nowYear?' <span style="font-size:9px;color:var(--green);">(올해)</span>':''}</div>
       <select class="ly-icon-select" data-id="${r.id}">${lrIconOptions(r.icon)}</select>
-      <button class="rm-year" data-id="${r.id}" style="display:block;margin:3px auto 0;border:none;background:none;color:var(--rust);font-size:10px;cursor:pointer;">✕삭제</button></th>`).join('');
+    </th>`).join('');
     function textRow(field, label, placeholder){
       const cells = chunkRows.map(r=>`<td><textarea class="ly-input autogrow" data-id="${r.id}" data-field="${field}" placeholder="${placeholder||''}" rows="1" style="width:100px;">${escapeHtml(r[field]||'')}</textarea></td>`).join('');
       return `<tr><td>${label}</td>${cells}</tr>`;
+    }
+    function ageRow(){
+      if(lr.birthYear){
+        const cells = chunkRows.map(r=>`<td class="num" style="font-weight:700;">${r.year-lr.birthYear}세</td>`).join('');
+        return `<tr><td>나이</td>${cells}</tr>`;
+      }
+      return textRow('age','나이/메모','39세');
     }
     function numRow(field, label){
       const cells = chunkRows.map(r=>`<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${r[field]||0}" style="width:86px;"></td>`).join('');
@@ -1567,7 +1701,7 @@ function longRoadmapView(){
       <div class="card scrolltable">
         <table class="budget">
           <tr><th>연도</th>${yearHeads}</tr>
-          ${textRow('age','나이/메모','39세')}
+          ${ageRow()}
           ${textRow('lifeEvent','생애이슈','')}
           ${numRow('withdrawal','지출/인출액')}
           ${numRow('savings','연저축액')}
@@ -1586,20 +1720,22 @@ function longRoadmapView(){
 
   return `
     <div class="card">
-      <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${data.longRoadmap.startingAsset||0}"></div>
-      <div style="font-size:10.5px;color:var(--ink-soft);">첫 해 시작 자산이에요. 이후 해는 이전 해 연말 자산에서 자동으로 이어져요.</div>
+      <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${lr.startingAsset||0}"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">${nowYear}년(올해) 시작 자산이에요. 매년 자동으로 계산된 값이 다음 해로 이어져요.</div>
+      <div class="yfield" style="margin-top:8px;"><label>출생연도</label><input type="number" id="lr-birthyear" value="${lr.birthYear||''}" placeholder="예: 1988"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">출생연도를 넣으면 아래 표의 나이가 연도에 맞춰 자동으로 계산돼요.</div>
       <div class="grouplabel" style="margin-top:12px;">연도별 상징 아이콘</div>
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:2px;">아래 표에서 연도마다 상징을 골라두면, 그 해가 도장처럼 표시돼요 (내 집 마련, 결혼, 승진 등 인생의 이정표를 자유롭게 남겨보세요)</div>
       ${lrIconLegend()}
     </div>
     ${longRoadmapGrowthChart(rows)}
+    <div style="font-size:11px;color:var(--ink-soft);margin:4px 2px 0;">${nowYear}년부터 ${nowYear+39}년까지 40년치가 자동으로 채워져 있어요. 해가 바뀌면 표가 자동으로 한 해씩 밀려서 항상 올해부터 40년 뒤까지 보여줘요.</div>
     ${tables}
-    <button id="addYearBtn" style="width:100%;padding:10px;border:1px dashed var(--line);border-radius:8px;background:none;color:var(--ink-soft);cursor:pointer;font-size:13px;margin-top:12px;">+ 연도 1개 추가</button>
-    <div style="display:flex;gap:6px;margin-top:8px;">
-      <input type="number" id="bulkYearsCount" placeholder="예: 30" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
-      <button id="addYearsBulkBtn" style="background:var(--ink);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;white-space:nowrap;">몇 년치 한번에 추가</button>
+    <div style="display:flex;gap:6px;margin-top:12px;">
+      <input type="number" id="bulkYearsCount" placeholder="예: 10" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
+      <button id="addYearsBulkBtn" style="background:var(--ink);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;white-space:nowrap;">40년 이후로 더 추가</button>
     </div>
-    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">10년 단위로 표가 새로 생겨서 아래로 이어져요 (가로 스크롤이 무한정 길어지지 않아요). 마지막 연도 다음 해부터 이어서 추가되고, 연도 숫자는 표 맨 위 칸에서 언제든 직접 바꿀 수 있어요.</div>
+    <div style="font-size:10.5px;color:var(--ink-soft);margin-top:6px;">기본 40년보다 더 먼 미래까지 보고 싶을 때만 사용하세요. 10년 단위로 표가 새로 생겨서 아래로 이어져요.</div>
   `;
 }
 
@@ -1608,6 +1744,7 @@ function longRoadmapView(){
 function manwon(n){ return Math.round((n||0)/10000*10)/10 + '만'; }
 function assetMonKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function prevMonthKey(d){ const p = new Date(d.getFullYear(), d.getMonth()-1, 1); return assetMonKey(p); }
+function nextMonthKey(d){ const n = new Date(d.getFullYear(), d.getMonth()+1, 1); return assetMonKey(n); }
 
 function monthTotalFromSnapshot(snap){
   if(!snap) return 0;
@@ -2148,10 +2285,19 @@ function importBackup(file){
       }
       if(!confirm('백업 파일을 불러오면 지금 이 기기의 데이터를 덮어씁니다. 계속할까요?')) return;
       data = parsed;
+      applyMigrationsAndDefaults();
       if(!data.lastBackupDate) data.lastBackupDate = isoDate(new Date());
-      await save();
+      const ok = await save();
       render();
-      alert('불러오기 완료했어요.');
+      if(ok){
+        alert('불러오기 완료했어요.');
+      } else {
+        // save() failed — don't tell the user it worked. The local mirror inside save()
+        // still has this data, but the primary store (Firebase/window.storage) does not,
+        // so warn clearly instead of the old silent "success" that made data vanish
+        // the moment the page was refreshed and reloaded from the primary store.
+        alert('불러오긴 했지만 서버 저장에 실패했어요. 인터넷 연결을 확인한 뒤 카테고리 설정 탭에서 다시 "백업 파일 불러오기"를 시도해주세요. 지금 새로고침하면 이 내용이 사라질 수 있어요.');
+      }
     }catch(err){
       alert('파일을 읽을 수 없어요: '+err.message);
     }
