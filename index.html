@@ -144,6 +144,13 @@
   .catrow input{ width:92px; min-width:92px; border:1px solid var(--line); border-radius:4px; padding:4px 5px; font-size:11.5px; font-family:inherit; text-align:right; }
   .catrow .rm{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; }
 
+  /* remove the native up/down spinner on every number input in the app (연도/개수/수익률 등
+     콤마 표시가 필요없는 필드에 여전히 남아있는 type=number 입력칸용) — 원화 금액 입력칸들은
+     아래 .money-input(텍스트+콤마 포맷)으로 별도 전환되어 있음 */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  input[type=number]{ -moz-appearance:textfield; }
+
   .searchbox{ display:flex; gap:6px; margin-bottom:10px; }
   .searchbox input, .searchbox select{ padding:8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; font-family:inherit; }
   .searchbox input{ flex:1; }
@@ -318,6 +325,35 @@ function bigWon(n){
 }
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function monKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+
+// ---- 원화 콤마 입력칸(.money-input) 지원 ----
+// 금액 입력칸들은 type="number" 대신 type="text"로 두고 이 클래스를 붙여서, 입력하는 즉시
+// 1,000,000 같은 천단위 콤마가 보이도록 한다. 저장 시에는 parseWon/parseWonFloat로 콤마를
+// 제거하고 숫자로 바꾼다(콤마가 없는 일반 숫자 문자열에 써도 안전해서, 굳이 .money-input이
+// 아닌 입력칸에 써도 무해하다).
+function parseWon(v){ return parseInt(String(v==null?'':v).replace(/,/g,''))||0; }
+function parseWonFloat(v){ return parseFloat(String(v==null?'':v).replace(/,/g,''))||0; }
+function formatMoneyInputValue(v){
+  const digits = String(v==null?'':v).replace(/[^0-9]/g,'');
+  if(!digits) return '';
+  return parseInt(digits,10).toLocaleString('en-US');
+}
+// 렌더될 때마다 입력칸이 새로 생기므로, 매번 다시 바인딩할 필요 없이 document에 한 번만
+// 위임 리스너를 걸어서 .money-input 클래스가 있는 모든 입력칸의 실시간 콤마 포맷을 처리한다.
+function initMoneyInputFormatting(){
+  document.addEventListener('input', (e)=>{
+    const el = e.target;
+    if(!el || !el.classList || !el.classList.contains('money-input')) return;
+    const before = el.value;
+    const caretFromEnd = before.length - (el.selectionStart==null?before.length:el.selectionStart);
+    const formatted = formatMoneyInputValue(before);
+    if(formatted !== before){
+      el.value = formatted;
+      const pos = Math.max(0, formatted.length - caretFromEnd);
+      try{ el.setSelectionRange(pos, pos); }catch(err){}
+    }
+  });
+}
 
 function applyMigrationsAndDefaults(){
   if(!data.monthFeedback) data.monthFeedback = {};
@@ -780,7 +816,7 @@ function weekView(){
       const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="wk-budget-input" data-cid="${c.id}" value="${weeklyBudget}" style="width:98px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="text" inputmode="numeric" class="wk-budget-input money-input" data-cid="${c.id}" value="${(weeklyBudget||0).toLocaleString('en-US')}" style="width:98px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
       </tr>
@@ -967,7 +1003,7 @@ function bindTabEvents(){
   catBudgetInputs.forEach(inp=>{
     inp.onchange = async ()=>{
       const c = catById(inp.dataset.cid);
-      c.budget = parseInt(inp.value)||0;
+      c.budget = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -975,7 +1011,7 @@ function bindTabEvents(){
   catWeekInputs.forEach(inp=>{
     inp.onchange = async ()=>{
       const c = catById(inp.dataset.cid);
-      c.weeklyBudget = parseInt(inp.value)||0;
+      c.weeklyBudget = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -985,7 +1021,7 @@ function bindTabEvents(){
       const {mon} = getWeekRange(refDate);
       const wk = weekKey(mon);
       if(!data.weeklyBudgets[wk]) data.weeklyBudgets[wk] = {};
-      data.weeklyBudgets[wk][inp.dataset.cid] = parseInt(inp.value)||0;
+      data.weeklyBudgets[wk][inp.dataset.cid] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1003,7 +1039,7 @@ function bindTabEvents(){
     inp.onchange = async ()=>{
       const mk = monKey(monthRef);
       if(!data.monthlyBudgets[mk]) data.monthlyBudgets[mk] = {};
-      data.monthlyBudgets[mk][inp.dataset.cid] = parseInt(inp.value)||0;
+      data.monthlyBudgets[mk][inp.dataset.cid] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1011,7 +1047,7 @@ function bindTabEvents(){
     inp.onchange = async ()=>{
       const nmk = nextMonthKey(monthRef);
       if(!data.monthlyBudgets[nmk]) data.monthlyBudgets[nmk] = {};
-      data.monthlyBudgets[nmk][inp.dataset.cid] = parseInt(inp.value)||0;
+      data.monthlyBudgets[nmk][inp.dataset.cid] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1087,11 +1123,13 @@ function bindTabEvents(){
   if(yearNext) yearNext.onclick = ()=>{ roadmapYear++; render(); };
 
   // annual plan inputs
+  const autoFillIncomeBtn = document.getElementById('autoFillIncomeBtn');
+  if(autoFillIncomeBtn) autoFillIncomeBtn.onclick = ()=> autoFillIncomePlan(roadmapYear);
   document.querySelectorAll('.annual-plan-input').forEach(inp=>{
     inp.onchange = async ()=>{
       const y = roadmapYear;
       if(!data.annualPlan[y]) data.annualPlan[y] = {income:{},expense:{},saving:{},events:{}};
-      data.annualPlan[y][inp.dataset.type][inp.dataset.month] = parseInt(inp.value)||0;
+      data.annualPlan[y][inp.dataset.type][inp.dataset.month] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1108,7 +1146,7 @@ function bindTabEvents(){
   if(addEventBtn) addEventBtn.onclick = async ()=>{
     const name = document.getElementById('newEventName').value.trim();
     const month = parseInt(document.getElementById('newEventMonth').value)||1;
-    const plannedAmount = parseInt(document.getElementById('newEventPlan').value)||0;
+    const plannedAmount = parseWon(document.getElementById('newEventPlan').value);
     if(!name) return;
     const y = roadmapYear;
     if(!data.annualEvents[y]) data.annualEvents[y] = [];
@@ -1126,7 +1164,7 @@ function bindTabEvents(){
     inp.onchange = async ()=>{
       const y = roadmapYear;
       const ev = (data.annualEvents[y]||[]).find(e=>e.id===inp.dataset.id);
-      if(ev){ ev.plannedAmount = parseInt(inp.value)||0; await save(); render(); }
+      if(ev){ ev.plannedAmount = parseWon(inp.value); await save(); render(); }
     };
   });
 
@@ -1156,7 +1194,7 @@ function bindTabEvents(){
       const rm = data.shortRoadmap[y];
       const store = rm[inp.dataset.kind];
       if(!store[inp.dataset.item]) store[inp.dataset.item] = {};
-      store[inp.dataset.item][inp.dataset.month] = parseInt(inp.value)||0;
+      store[inp.dataset.item][inp.dataset.month] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1172,7 +1210,7 @@ function bindTabEvents(){
   const lrStart = document.getElementById('lr-start');
   if(lrStart) lrStart.onchange = async ()=>{
     ensureLongRoadmap();
-    data.longRoadmap.startingAsset = parseInt(lrStart.value)||0;
+    data.longRoadmap.startingAsset = parseWon(lrStart.value);
     await save(); render();
   };
   const lrBirthYear = document.getElementById('lr-birthyear');
@@ -1201,7 +1239,7 @@ function bindTabEvents(){
       if(!y) return;
       const field = inp.dataset.field;
       const numeric = ['withdrawal','savings','returnPct','realEstate'].includes(field);
-      y[field] = numeric ? (parseFloat(inp.value)||0) : inp.value;
+      y[field] = numeric ? parseWonFloat(inp.value) : inp.value;
       await save(); render();
     };
   });
@@ -1226,7 +1264,7 @@ function bindTabEvents(){
     inp.onchange = async ()=>{
       const mk = assetMonKey(assetMonthRef);
       if(!data.assetSnapshots[mk]) data.assetSnapshots[mk] = {};
-      data.assetSnapshots[mk][inp.dataset.id] = parseInt(inp.value)||0;
+      data.assetSnapshots[mk][inp.dataset.id] = parseWon(inp.value);
       await save(); render();
     };
   });
@@ -1266,7 +1304,7 @@ function bindTabEvents(){
     const today = new Date();
     const start = toISO(today);
     const endD = new Date(today); endD.setFullYear(endD.getFullYear()+1);
-    data.projects.push({id:uid(), code:'', nameKr:name, nameEn:'', principal:0, startDate:start, endDate:toISO(endD), rate1:0, rate2:null, rate3:null, note:''});
+    data.projects.push({id:uid(), code:'', nameKr:name, nameEn:'', principal:0, startDate:start, endDate:toISO(endD), rate1:0, rate2:null, rate3:null, note:'', includeInTotal:true});
     await save(); render();
   };
   const projRefDate = document.getElementById('projRefDate');
@@ -1280,6 +1318,14 @@ function bindTabEvents(){
       await save(); render();
     };
   });
+  document.querySelectorAll('.proj-include-toggle').forEach(cb=>{
+    cb.onchange = async ()=>{
+      const p = data.projects.find(x=>x.id===cb.dataset.id);
+      if(!p) return;
+      p.includeInTotal = cb.checked;
+      await save(); render();
+    };
+  });
   document.querySelectorAll('.proj-field').forEach(inp=>{
     inp.onchange = async ()=>{
       const p = data.projects.find(x=>x.id===inp.dataset.id);
@@ -1287,7 +1333,7 @@ function bindTabEvents(){
       const field = inp.dataset.field;
       const numericFields = ['principal','rate1'];
       const floatOptionalFields = ['rate2','rate3'];
-      if(numericFields.includes(field)) p[field] = parseFloat(inp.value)||0;
+      if(numericFields.includes(field)) p[field] = parseWonFloat(inp.value);
       else if(floatOptionalFields.includes(field)) p[field] = inp.value===''? null : parseFloat(inp.value);
       else p[field] = inp.value;
       await save(); render();
@@ -1333,7 +1379,7 @@ function monthView(){
       const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="text" inputmode="numeric" class="month-budget-input money-input" data-cid="${c.id}" value="${(budget||0).toLocaleString('en-US')}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</td>
       </tr>
@@ -1363,7 +1409,7 @@ function monthView(){
       const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="text" inputmode="numeric" class="month-budget-input money-input" data-cid="${c.id}" value="${(budget||0).toLocaleString('en-US')}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
       </tr>
@@ -1464,7 +1510,7 @@ function nextMonthBudgetSection(mk){
         <span class="tag ${tagClass(c)}">${tagLabel(c)}</span>
         <span class="nm">${c.name}</span>
         <span style="font-size:10.5px;color:var(--ink-soft);width:76px;text-align:right;">이번달 ${won(curEffective(c))}</span>
-        <input type="number" class="next-month-budget-input" data-cid="${c.id}" value="${nextVal(c)}" style="width:104px;">
+        <input type="text" inputmode="numeric" class="next-month-budget-input money-input" data-cid="${c.id}" value="${(nextVal(c)||0).toLocaleString('en-US')}" style="width:104px;">
       </div>`).join('');
   }
   const groups = [
@@ -1504,6 +1550,60 @@ function roadmapView(){
   `;
 }
 
+// 특정 연/월의 실제 거래 합계 (수입/지출/저축 공통) — annualPlanView 및 자동채움 로직에서 공유
+function actualTypeTotalForMonth(year, month, type){
+  const d = new Date(year, month-1, 1);
+  const {start,end} = monthBounds(d);
+  return entriesInRange(start,end).filter(e=>catById(e.categoryId)?.type===type).reduce((s,e)=>s+e.amount,0);
+}
+// 최근 N개월(이번달 제외, 완료된 달 기준) 실제 수입 평균 — 연간 머니플랜 자동채움의 기준값
+function recentActualIncomeAverage(monthsBack){
+  const now = new Date();
+  let sum = 0;
+  for(let i=1;i<=monthsBack;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    sum += actualTypeTotalForMonth(d.getFullYear(), d.getMonth()+1, 'income');
+  }
+  return monthsBack>0 ? sum/monthsBack : 0;
+}
+// 특정 연/월에 운용중인 프로젝트(예금/적금 등)들의 예상 월 이자수익 합계
+function projectIncomeForMonth(year, month){
+  const refDate = new Date(year, month-1, 15);
+  return data.projects.reduce((sum,p)=>{
+    if(p.includeInTotal===false) return sum; // 정산 제외로 표시한 프로젝트는 자동합산에서 빠진다
+    const c = computeProject(p, refDate);
+    return c.status==='운용중' ? sum + c.monthlyIncome : sum;
+  }, 0);
+}
+// 연간 머니플랜 수입 계획 자동채움: 최근 6개월 실제 수입 평균 + 그 달 프로젝트 예상이자를 더해서,
+// 비어있는(0인) 달만 채운다. 이미 손으로 입력해둔 달은 절대 덮어쓰지 않는다.
+async function autoFillIncomePlan(year){
+  if(!data.annualPlan[year]) data.annualPlan[year] = {income:{}, expense:{}, saving:{}, events:{}};
+  const plan = data.annualPlan[year];
+  if(!plan.income) plan.income = {};
+  const baseIncome = recentActualIncomeAverage(6);
+  const hasAnyProject = data.projects.some(p=>p.principal && p.includeInTotal!==false);
+  if(baseIncome<=0 && !hasAnyProject){
+    alert('최근 6개월 실제 수입 기록이나 등록된 프로젝트가 없어서 자동채움 결과가 0이 돼요. 먼저 수입 기록을 남기거나 프로젝트를 등록한 뒤 다시 시도해주세요.');
+    return;
+  }
+  let filledCount = 0;
+  for(let m=1;m<=12;m++){
+    if(!plan.income[m]){
+      const proj = projectIncomeForMonth(year, m);
+      plan.income[m] = Math.round(baseIncome + proj);
+      filledCount++;
+    }
+  }
+  if(filledCount===0){
+    alert('이미 모든 달에 수입 계획이 입력되어 있어서 채울 빈 칸이 없어요. 값을 바꾸고 싶다면 직접 수정해주세요.');
+    return;
+  }
+  await save();
+  render();
+  alert(filledCount+'개월치 수입 계획을 자동으로 채웠어요 (최근 6개월 실제 수입 평균 '+won(Math.round(baseIncome))+' + 프로젝트 예상이자 합산). 필요하면 각 칸을 직접 수정할 수 있어요.');
+}
+
 function annualPlanView(){
   const year = roadmapYear;
   if(!data.annualPlan[year]) data.annualPlan[year] = {income:{}, expense:{}, saving:{}, events:{}};
@@ -1512,15 +1612,13 @@ function annualPlanView(){
   if(!plan.events) plan.events = {};
 
   function actualForMonth(m, type){
-    const d = new Date(year, m-1, 1);
-    const {start,end} = monthBounds(d);
-    return entriesInRange(start,end).filter(e=>catById(e.categoryId)?.type===type).reduce((s,e)=>s+e.amount,0);
+    return actualTypeTotalForMonth(year, m, type);
   }
   function planRow(type){
     let cells='', total=0;
     for(let m=1;m<=12;m++){
       const v = plan[type][m]||0; total+=v;
-      cells += `<td class="num"><input type="number" class="annual-plan-input" data-type="${type}" data-month="${m}" value="${v}"></td>`;
+      cells += `<td class="num"><input type="text" inputmode="numeric" class="annual-plan-input money-input" data-type="${type}" data-month="${m}" value="${(v||0).toLocaleString('en-US')}"></td>`;
     }
     return {cells, total};
   }
@@ -1549,6 +1647,10 @@ function annualPlanView(){
       <button id="yearNext">›</button>
     </div>
     <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:10px;">항목별 세부내역이 아닌 총액 기준이에요. 계획 칸에 숫자를 넣으면 그 달의 목표가 되고, 실제는 거래 기록에서 자동 집계돼요.</div>
+    <div style="margin-bottom:10px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+      <button id="autoFillIncomeBtn" class="rtabbtn" type="button">최근 데이터로 수입 계획 자동채움</button>
+      <span style="font-size:10px;color:var(--ink-soft);">최근 6개월 실제 수입 평균 + 프로젝트 예상이자를 더해서, 비어있는 달만 채워요</span>
+    </div>
     <div class="card scrolltable">
       <table class="budget">
         <tr><th>구분</th>${monthHeads}<th>합계</th></tr>
@@ -1578,7 +1680,7 @@ function eventDashboard(year){
     const diff = (ev.plannedAmount||0) - actual;
     return `<div class="asset-row">
       <span class="nm">${escapeHtml(ev.name)} <span style="color:var(--ink-soft);font-size:10px;">${ev.month?monthNames[ev.month-1]:'연중'}</span></span>
-      <input type="number" class="event-plan-input" data-id="${ev.id}" value="${ev.plannedAmount||0}" style="width:90px;">
+      <input type="text" inputmode="numeric" class="event-plan-input money-input" data-id="${ev.id}" value="${(ev.plannedAmount||0).toLocaleString('en-US')}" style="width:90px;">
       <span class="diff" style="width:auto;margin:0 6px;">실제 ${won(actual)}</span>
       <span class="diff ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</span>
       <button class="rm-event" data-id="${ev.id}" style="background:none;border:none;color:var(--ink-soft);cursor:pointer;">✕</button>
@@ -1593,7 +1695,7 @@ function eventDashboard(year){
       <div class="addcat-form" style="margin-top:10px;flex-wrap:wrap;">
         <input id="newEventName" placeholder="이벤트 이름 (예: 설 명절)" style="flex:1;min-width:120px;">
         <select id="newEventMonth">${monthOpts}</select>
-        <input id="newEventPlan" type="number" placeholder="계획 금액" style="width:100px;">
+        <input id="newEventPlan" type="text" inputmode="numeric" class="money-input" placeholder="계획 금액" style="width:100px;">
         <button id="addEventBtn">추가</button>
       </div>
     </div>
@@ -1611,7 +1713,7 @@ function shortRoadmapView(){
       const store = rm[kind];
       if(!store[itemId]) store[itemId] = {};
       const v = store[itemId][m]||0; total+=v;
-      cells += `<td class="num"><input type="number" class="rm-item-input" data-item="${itemId}" data-kind="${kind}" data-month="${m}" value="${v}"></td>`;
+      cells += `<td class="num"><input type="text" inputmode="numeric" class="rm-item-input money-input" data-item="${itemId}" data-kind="${kind}" data-month="${m}" value="${(v||0).toLocaleString('en-US')}"></td>`;
     }
     return {cells,total};
   }
@@ -1866,7 +1968,7 @@ function longRoadmapGrowthChart(rows){
     const val = minV + (maxV-minV)*(1-frac);
     const gy = padT + innerH*frac;
     return `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--line)" stroke-width="1"/>
-      <text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${manwon(val)}</text>`;
+      <text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${eokwonAxis(val)}</text>`;
   }).join('');
   const step = n>10 ? Math.ceil(n/10) : 1;
   const xLabels = rows.map((r,i)=>{
@@ -1932,8 +2034,14 @@ function longRoadmapView(){
       }
       return textRow('age','나이/메모','39세');
     }
-    function numRow(field, label){
-      const cells = chunkRows.map(r=>`<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${r[field]||0}" style="width:118px;"></td>`).join('');
+    function numRow(field, label, isMoney){
+      isMoney = isMoney!==false; // default true — 지출/저축/부동산 같은 원화 필드는 콤마 표시, 수익률(%)만 false로 예외
+      const cells = chunkRows.map(r=>{
+        const v = r[field]||0;
+        return isMoney
+          ? `<td class="num"><input type="text" inputmode="numeric" class="ly-input money-input" data-id="${r.id}" data-field="${field}" value="${v.toLocaleString('en-US')}" style="width:118px;"></td>`
+          : `<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${v}" style="width:118px;"></td>`;
+      }).join('');
       return `<tr><td>${label}</td>${cells}</tr>`;
     }
     function computedRow(label, key, color){
@@ -1952,7 +2060,7 @@ function longRoadmapView(){
           ${textRow('lifeEvent','생애이슈','')}
           ${numRow('withdrawal','지출/인출액')}
           ${numRow('savings','연저축액')}
-          ${numRow('returnPct','기대수익률(%)')}
+          ${numRow('returnPct','기대수익률(%)',false)}
           ${computedRow('연말 투자자산','afterReturn','green')}
           ${numRow('realEstate','부동산등자산')}
           ${computedRow('총자산합계','grandTotal','gold')}
@@ -1969,7 +2077,7 @@ function longRoadmapView(){
     <div class="card">
       <div class="yfield"><label>시작연도</label><input type="number" id="lr-startyear" value="${lr.windowStartYear||nowYear}"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">표의 첫 해를 직접 정할 수 있어요. 여기를 바꾸면 이미 입력한 숫자는 그대로 두고 40년 전체 연도만 그만큼 밀려요 (예: 2026→2027로 바꾸면 다음 해는 자동으로 2028). 그 뒤로는 실제 날짜가 흐르는 만큼 계속 한 해씩 자동으로 더 밀려요.</div>
-      <div class="yfield" style="margin-top:8px;"><label>시작 투자자산</label><input type="number" id="lr-start" value="${lr.startingAsset||0}"></div>
+      <div class="yfield" style="margin-top:8px;"><label>시작 투자자산</label><input type="text" inputmode="numeric" class="money-input" id="lr-start" value="${(lr.startingAsset||0).toLocaleString('en-US')}"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">${lr.windowStartYear||nowYear}년(첫 해) 시작 자산이에요. 매년 자동으로 계산된 값이 다음 해로 이어져요.</div>
       <div class="yfield" style="margin-top:8px;"><label>출생연도</label><input type="number" id="lr-birthyear" value="${lr.birthYear||''}" placeholder="예: 1988"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">출생연도를 넣으면 아래 표의 나이가 연도에 맞춰 자동으로 계산돼요.</div>
@@ -1991,6 +2099,12 @@ function longRoadmapView(){
 
 /* ---------- ASSET VIEW ---------- */
 function manwon(n){ return Math.round((n||0)/10000*10)/10 + '만'; }
+// 억 단위 축 라벨(장기 로드맵 자산 증감 그래프 전용) — 자산이 커질수록 만원 단위 숫자가
+// 너무 길어지므로, 그래프 세로축만 억 단위(소수점 둘째자리)로 표시한다.
+function eokwonAxis(n){
+  const v = Math.round((n||0)/100000000*100)/100;
+  return v + '억';
+}
 function assetMonKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 function prevMonthKey(d){ const p = new Date(d.getFullYear(), d.getMonth()-1, 1); return assetMonKey(p); }
 function nextMonthKey(d){ const n = new Date(d.getFullYear(), d.getMonth()+1, 1); return assetMonKey(n); }
@@ -2078,7 +2192,7 @@ function assetView(){
       const diffLabel = !hasPrevData ? '<span style="color:var(--ink-soft);font-weight:400;">신규</span>' : (diff===0 ? '-' : `${diff>0?'+':'-'}${won(Math.abs(diff))}`);
       return `<div class="asset-row">
         <span class="nm">${it.name}</span>
-        <input type="number" class="asset-input" data-id="${it.id}" value="${curVal}">
+        <input type="text" inputmode="numeric" class="asset-input money-input" data-id="${it.id}" value="${curVal.toLocaleString('en-US')}">
         <span class="diff ${diff<0?'diff-over':'diff-under'}">${diffLabel}</span>
         <button class="rm-asset" data-id="${it.id}" style="background:none;border:none;color:var(--ink-soft);cursor:pointer;">✕</button>
       </div>`;
@@ -2156,6 +2270,7 @@ function migrateProjects(){
     if(p.rate1==null){
       p.rate1 = (p.interestAmount && p.principal) ? Math.round((p.interestAmount*12/p.principal)*10000)/10000 : 0;
     }
+    if(p.includeInTotal===undefined) p.includeInTotal = true; // 정산(합계)에 포함할지 여부 — 기본은 포함
     delete p.dayOfMonth; delete p.interestAmount; delete p.termText;
   });
 }
@@ -2216,13 +2331,17 @@ function projectListView(){
   const refDate = getRefDate();
   const computed = data.projects.map(p=>({p, c:computeProject(p, refDate)}));
   const active = computed.filter(x=>x.c.status==='운용중');
-  const totalPrincipal = active.reduce((s,x)=>s+(x.p.principal||0),0);
-  const avgRate = totalPrincipal>0 ? active.reduce((s,x)=>s+x.c.annualIncome,0)/totalPrincipal : 0;
-  const monthlyTotal = active.reduce((s,x)=>s+x.c.monthlyIncome,0);
-  const annualTotal = active.reduce((s,x)=>s+x.c.annualIncome,0);
-  const cumTotal = active.reduce((s,x)=>s+x.c.cumulativeInterest,0);
-  const maturityTotal = active.reduce((s,x)=>s+x.c.totalMaturity,0);
+  // 정산(합계)에서 제외하기로 한 프로젝트는 아래 요약 박스 숫자에서 자동으로 빠진다 —
+  // 목록에는 계속 보이고 개별 수치도 그대로 표시되지만, 총액 계산에만 안 들어간다.
+  const activeForTotal = active.filter(x=>x.p.includeInTotal!==false);
+  const totalPrincipal = activeForTotal.reduce((s,x)=>s+(x.p.principal||0),0);
+  const avgRate = totalPrincipal>0 ? activeForTotal.reduce((s,x)=>s+x.c.annualIncome,0)/totalPrincipal : 0;
+  const monthlyTotal = activeForTotal.reduce((s,x)=>s+x.c.monthlyIncome,0);
+  const annualTotal = activeForTotal.reduce((s,x)=>s+x.c.annualIncome,0);
+  const cumTotal = activeForTotal.reduce((s,x)=>s+x.c.cumulativeInterest,0);
+  const maturityTotal = activeForTotal.reduce((s,x)=>s+x.c.totalMaturity,0);
   const countActive = active.length;
+  const countExcluded = active.length - activeForTotal.length;
   const countMatured = computed.filter(x=>x.c.status==='만기완료').length;
 
   const rows = computed.map(({p,c})=>`
@@ -2234,13 +2353,17 @@ function projectListView(){
         </div>
         <button class="rm-project" data-id="${p.id}" style="background:none;border:none;color:var(--rust);cursor:pointer;">✕</button>
       </div>
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-soft);margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" class="proj-include-toggle" data-id="${p.id}" ${p.includeInTotal!==false?'checked':''}>
+        정산(합계)에 포함 — 체크 해제하면 위 요약 총액과 수입 계획 자동채움에서 이 프로젝트만 제외돼요
+      </label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
         <input type="text" class="proj-field" data-id="${p.id}" data-field="code" value="${(p.code||'').replace(/"/g,'&quot;')}" placeholder="프로젝트번호" style="width:90px;">
         <input type="text" class="proj-field" data-id="${p.id}" data-field="nameKr" value="${(p.nameKr||'').replace(/"/g,'&quot;')}" placeholder="국문명" style="width:110px;">
         <input type="text" class="proj-field" data-id="${p.id}" data-field="nameEn" value="${(p.nameEn||'').replace(/"/g,'&quot;')}" placeholder="영문명" style="width:110px;">
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
-        <input type="number" class="proj-field" data-id="${p.id}" data-field="principal" value="${p.principal||0}" placeholder="투자원금" style="width:100px;">
+        <input type="text" inputmode="numeric" class="proj-field money-input" data-id="${p.id}" data-field="principal" value="${(p.principal||0).toLocaleString('en-US')}" placeholder="투자원금" style="width:100px;">
         <input type="date" class="proj-field" data-id="${p.id}" data-field="startDate" value="${p.startDate||''}" style="width:130px;">
         <input type="date" class="proj-field" data-id="${p.id}" data-field="endDate" value="${p.endDate||''}" style="width:130px;">
       </div>
@@ -2275,7 +2398,7 @@ function projectListView(){
       <div class="box"><div class="lbl">누적 이자수익</div><div class="val" style="color:var(--green);">${won(Math.round(cumTotal))}</div></div>
       <div class="box"><div class="lbl">만기까지 총수익</div><div class="val" style="color:var(--green);">${won(Math.round(maturityTotal))}</div></div>
     </div>
-    <div style="text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">운용중 ${countActive}건 · 만기완료 ${countMatured}건 (요약은 운용중 기준)</div>
+    <div style="text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:10px;">운용중 ${countActive}건 · 만기완료 ${countMatured}건 (요약은 운용중이면서 정산에 포함된 ${activeForTotal.length}건 기준${countExcluded>0?`, 정산 제외 ${countExcluded}건은 합계에서 빠졌어요`:''})</div>
 
     <div class="card">
       <div class="itemrow-head">
@@ -2298,12 +2421,17 @@ function projectCalendarView(){
   const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
 
   const computed = data.projects.map(p=>({p, c:computeProject(p, refDate)}));
+  // 칩은 정산 포함여부와 상관없이 운용중인 프로젝트를 다 보여준다 (입금 확인은 개별 프로젝트 단위 기록이라
+  // 정산 제외 여부와 무관하게 계속 쓸모가 있음). 다만 아래 합계(예정수익금/입금확인됨/주간예정)는
+  // includeInTotal이 false인 프로젝트를 자동으로 빼서, "정산에 포함하지 않을 프로젝트"가 총액을
+  // 부풀리지 않도록 한다.
   const activeProjects = computed.filter(x=>x.c.status==='운용중').map(x=>({
-    id:x.p.id, name:x.p.nameKr||x.p.code, day: parseISO(x.p.startDate)?parseISO(x.p.startDate).getDate():null, amount:x.c.monthlyIncome
+    id:x.p.id, name:x.p.nameKr||x.p.code, day: parseISO(x.p.startDate)?parseISO(x.p.startDate).getDate():null, amount:x.c.monthlyIncome, includeInTotal:x.p.includeInTotal!==false
   })).filter(x=>x.day);
+  const summableProjects = activeProjects.filter(p=>p.includeInTotal);
 
   let expectedTotal = 0, receivedTotal = 0;
-  activeProjects.forEach(p=>{
+  summableProjects.forEach(p=>{
     if(p.day<=daysInMonth){
       expectedTotal += p.amount||0;
       const r = receipts[p.id];
@@ -2318,7 +2446,7 @@ function projectCalendarView(){
     const chips = projsToday.map(p=>{
       const r = receipts[p.id];
       const received = r && r.received;
-      return `<div class="projchip ${received?'received':''}" data-pid="${p.id}" title="${p.name}">${p.name.slice(0,6)} ${manwon(p.amount||0)}</div>`;
+      return `<div class="projchip ${received?'received':''}" data-pid="${p.id}" title="${p.name}${p.includeInTotal?'':' (정산 제외)'}" style="${p.includeInTotal?'':'opacity:0.5;'}">${p.name.slice(0,6)} ${manwon(p.amount||0)}</div>`;
     }).join('');
     cells.push(`<div class="calday">
       <div class="dnum">${day}</div>
@@ -2332,7 +2460,7 @@ function projectCalendarView(){
     gridHtml += cells.slice(i,i+7).join('');
     const weekDays = [];
     for(let d=i-firstWeekday+1; d<i-firstWeekday+8; d++){ if(d>=1 && d<=daysInMonth) weekDays.push(d); }
-    const weekTotal = activeProjects.filter(p=>weekDays.includes(p.day)).reduce((s,p)=>s+(p.amount||0),0);
+    const weekTotal = summableProjects.filter(p=>weekDays.includes(p.day)).reduce((s,p)=>s+(p.amount||0),0);
     if(weekDays.length>0){
       gridHtml += `<div class="weeksub">이번주 예정 ${won(Math.round(weekTotal))}</div>`;
     }
@@ -2407,8 +2535,8 @@ function catView(){
     <div class="catrow">
       <span class="tag ${tagClass(c)}">${tagLabel(c)}</span>
       <span class="nm">${c.name}</span>
-      ${(c.subtype||'variable')==='variable' ? `<input type="number" class="cat-week-input" data-cid="${c.id}" value="${c.weeklyBudget!=null?c.weeklyBudget:Math.round((c.budget||0)/4.345)}" placeholder="기본주예산" title="새 주에 기본으로 채워질 주예산">` : ''}
-      <input type="number" class="cat-budget-input" data-cid="${c.id}" value="${c.budget||0}" placeholder="월예산" title="월예산">
+      ${(c.subtype||'variable')==='variable' ? `<input type="text" inputmode="numeric" class="cat-week-input money-input" data-cid="${c.id}" value="${(c.weeklyBudget!=null?c.weeklyBudget:Math.round((c.budget||0)/4.345)).toLocaleString('en-US')}" placeholder="기본주예산" title="새 주에 기본으로 채워질 주예산">` : ''}
+      <input type="text" inputmode="numeric" class="cat-budget-input money-input" data-cid="${c.id}" value="${(c.budget||0).toLocaleString('en-US')}" placeholder="월예산" title="월예산">
       <button class="rm" data-cid="${c.id}">✕</button>
     </div>
   `).join('');
@@ -2470,7 +2598,7 @@ function openEntryModal(dateISO, opts){
       <div class="row"><input type="date" id="m-date" value="${initialDate}"></div>
       <div class="row"><select id="m-cat">${catOpts}</select></div>
       <div class="row"><input id="m-item" placeholder="품목 (예: 점심 김밥)" value="${isEdit?escapeHtml(existing.item||''):''}"></div>
-      <div class="row"><input id="m-amt" type="number" placeholder="금액" value="${isEdit?existing.amount:''}"></div>
+      <div class="row"><input id="m-amt" type="text" inputmode="numeric" class="money-input" placeholder="금액" value="${isEdit?existing.amount.toLocaleString('en-US'):''}"></div>
       <div class="row"><select id="m-event">${eventOpts}</select></div>
       <div class="actions">
         ${isEdit?'<button class="cancel" id="m-delete" style="color:var(--rust);border-color:var(--rust);">삭제</button>':''}
@@ -2494,7 +2622,7 @@ function openEntryModal(dateISO, opts){
     const date = document.getElementById('m-date').value || initialDate;
     const categoryId = document.getElementById('m-cat').value;
     const item = document.getElementById('m-item').value.trim();
-    const amount = parseInt(document.getElementById('m-amt').value)||0;
+    const amount = parseWon(document.getElementById('m-amt').value);
     const eventId = document.getElementById('m-event').value || null;
     if(amount<=0){ alert('금액을 입력해주세요'); return; }
     if(isEdit){
@@ -2517,7 +2645,7 @@ function openAddBudgetModal(dateISO){
     <div class="modal">
       <h3 class="serif">${dateISO} 예산 넣기</h3>
       <div class="row"><select id="b-cat">${catOpts || '<option value="">변동지출 카테고리가 없어요</option>'}</select></div>
-      <div class="row"><input id="b-amt" type="number" placeholder="이 날 쓸 예산 금액"></div>
+      <div class="row"><input id="b-amt" type="text" inputmode="numeric" class="money-input" placeholder="이 날 쓸 예산 금액"></div>
       <div class="actions">
         <button class="cancel" id="b-cancel">취소</button>
         <button class="primary" id="b-save">저장</button>
@@ -2529,7 +2657,7 @@ function openAddBudgetModal(dateISO){
   wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
   document.getElementById('b-save').onclick = async ()=>{
     const categoryId = document.getElementById('b-cat').value;
-    const amount = parseInt(document.getElementById('b-amt').value)||0;
+    const amount = parseWon(document.getElementById('b-amt').value);
     if(!categoryId){ alert('카테고리를 먼저 만들어주세요'); return; }
     if(amount<=0){ alert('금액을 입력해주세요'); return; }
     if(!data.dailyCategoryBudgets[dateISO]) data.dailyCategoryBudgets[dateISO] = {};
@@ -2626,6 +2754,7 @@ function loginErrorText(e){
   return '문제가 발생했어요: ' + (e && e.message || '');
 }
 
+initMoneyInputFormatting();
 if(initFirebase()){
   fbAuth.onAuthStateChanged(async (user)=>{
     if(user){ fbUser = user; await load(); }
