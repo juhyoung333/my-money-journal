@@ -69,8 +69,9 @@
   .entry{ border-bottom:1px dashed var(--line); padding:4px 0; font-size:11.5px; position:relative; }
   .entry .cat{ display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:10px; background:var(--green-soft); color:var(--green); margin-bottom:2px; }
   .entry .cat.income{ background:var(--gold-soft); color:var(--gold); }
-  .entry .amt{ font-weight:700; }
-  .entry .del{ position:absolute; right:0; top:2px; color:var(--ink-soft); cursor:pointer; font-size:10px; border:none; background:none; }
+  .entry .amt{ font-weight:700; cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }
+  .entry .actions{ position:absolute; right:0; top:2px; display:flex; gap:5px; }
+  .entry .edit, .entry .del{ color:var(--ink-soft); cursor:pointer; font-size:10px; border:none; background:none; }
   .addbtn{ width:100%; margin-top:6px; padding:5px; font-size:11px; border:1px dashed var(--line); background:none; border-radius:6px; color:var(--ink-soft); cursor:pointer; }
   .daytotal{ margin-top:6px; font-size:11px; text-align:right; color:var(--ink-soft); }
 
@@ -140,7 +141,7 @@
   .subtotal-row td{ font-weight:700; background:#FBF8F1; }
   .grouplabel{ font-size:11px; font-weight:700; color:var(--ink-soft); margin:10px 0 2px; }
   .catrow .nm{ flex:1; }
-  .catrow input{ width:64px; border:1px solid var(--line); border-radius:4px; padding:4px 5px; font-size:11.5px; font-family:inherit; text-align:right; }
+  .catrow input{ width:92px; min-width:92px; border:1px solid var(--line); border-radius:4px; padding:4px 5px; font-size:11.5px; font-family:inherit; text-align:right; }
   .catrow .rm{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; }
 
   .searchbox{ display:flex; gap:6px; margin-bottom:10px; }
@@ -162,7 +163,7 @@
   textarea.autogrow{ resize:none; overflow:hidden; font-family:inherit; border:1px solid var(--line); border-radius:3px; padding:2px 4px; line-height:1.35; }
   .scrolltable{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .scrolltable table{ min-width:640px; }
-  .scrolltable input{ width:56px; font-size:11px; padding:2px 3px; text-align:right; border:1px solid var(--line); border-radius:3px; font-family:inherit; }
+  .scrolltable input{ width:84px; min-width:84px; font-size:11px; padding:2px 3px; text-align:right; border:1px solid var(--line); border-radius:3px; font-family:inherit; }
   .yearcard{ background:var(--paper-card); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:10px; }
   .yearcard .yhead{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
   .yearcard .yhead .yr{ font-family:'Noto Serif KR',serif; font-weight:700; font-size:15px; }
@@ -178,8 +179,8 @@
   .asset-group-head{ font-size:12px; font-weight:700; margin:10px 0 4px; color:var(--ink-soft); }
   .asset-row{ display:flex; align-items:center; gap:6px; font-size:12px; border-bottom:1px solid var(--line); padding:6px 2px; }
   .asset-row .nm{ flex:1; }
-  .asset-row input{ width:100px; text-align:right; border:1px solid var(--line); border-radius:4px; padding:4px 6px; font-family:inherit; font-size:12px; }
-  .asset-row .diff{ width:78px; text-align:right; font-weight:700; font-size:11.5px; }
+  .asset-row input{ width:132px; min-width:132px; text-align:right; border:1px solid var(--line); border-radius:4px; padding:4px 6px; font-family:inherit; font-size:12px; }
+  .asset-row .diff{ width:auto; min-width:78px; text-align:right; font-weight:700; font-size:11.5px; white-space:nowrap; }
   .asset-subtotal{ display:flex; justify-content:space-between; font-size:12px; font-weight:700; padding:6px 2px; background:#FBF8F1; }
 
   /* project calendar */
@@ -299,6 +300,22 @@ function initAutoGrow(){
   });
 }
 function won(n){ return (n||0).toLocaleString('ko-KR') + '원'; }
+// compact Korean money formatting (억/만 units) for figures that can grow very large —
+// long-term roadmap totals, big asset sums — so the text stays short and readable
+// instead of a wall of digits that gets clipped in a narrow table cell.
+function bigWon(n){
+  n = Math.round(n||0);
+  const neg = n<0; n = Math.abs(n);
+  const eok = Math.floor(n/100000000);
+  const man = Math.floor((n%100000000)/10000);
+  const won1 = n%10000;
+  let parts = [];
+  if(eok>0) parts.push(eok.toLocaleString('ko-KR')+'억');
+  if(man>0 || (eok>0 && won1>0)) parts.push(man.toLocaleString('ko-KR')+'만');
+  if(eok===0 && man===0) parts.push(won1.toLocaleString('ko-KR'));
+  else if(won1>0) parts.push(won1.toLocaleString('ko-KR'));
+  return (neg?'-':'') + parts.join(' ') + '원';
+}
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function monKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 
@@ -326,47 +343,79 @@ function applyMigrationsAndDefaults(){
 // (very plausible right after a big write, like restoring a backup) could silently wipe
 // everything. Now a read failure just falls back to whatever's in the local mirror
 // (see save()) instead of ever auto-saving empty defaults over existing data.
+let loadErrorBannerEl = null;
+function showLoadErrorBanner(){
+  if(loadErrorBannerEl) return; // already showing — don't stack duplicates
+  const banner = document.createElement('div');
+  banner.id = 'loadErrorBanner';
+  banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;background:var(--rust);color:#fff;font-size:12px;padding:10px 14px;text-align:center;z-index:100;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;';
+  banner.innerHTML = `
+    <span>⚠ 최신 데이터를 불러오지 못해 임시 저장본을 표시하고 있어요. 지금 화면과 서버 데이터가 다를 수 있어요.</span>
+    <button id="loadErrorRetryBtn" style="background:#fff;color:var(--rust);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">다시 시도</button>
+    <button id="loadErrorCloseBtn" style="background:none;border:1px solid rgba(255,255,255,.7);color:#fff;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;">닫기</button>
+  `;
+  document.body.appendChild(banner);
+  loadErrorBannerEl = banner;
+  document.getElementById('loadErrorCloseBtn').onclick = ()=> hideLoadErrorBanner();
+  document.getElementById('loadErrorRetryBtn').onclick = ()=>{ hideLoadErrorBanner(); load(); };
+}
+// Called whenever we know the primary store is reachable again (a load or save just
+// succeeded) — clears a stale warning instead of leaving it stuck on screen forever,
+// which is what made it look like it "never goes away" even after data loaded fine.
+function hideLoadErrorBanner(){
+  if(loadErrorBannerEl){ loadErrorBannerEl.remove(); loadErrorBannerEl = null; }
+}
+async function readPrimaryStore(){
+  if(firebaseEnabled && fbUser){
+    const snap = await fbDb.ref('users/'+fbUser.uid+'/data').get();
+    if(snap.exists()){ data = snap.val(); applyMigrationsAndDefaults(); }
+    else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+  } else if(typeof window.storage !== 'undefined'){
+    const r = await window.storage.get(STORAGE_KEY, false);
+    if(r && r.value){ data = JSON.parse(r.value); applyMigrationsAndDefaults(); }
+    else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+  } else {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
+    else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
+  }
+}
 async function load(){
   let loadError = null;
   try{
-    if(firebaseEnabled && fbUser){
-      const snap = await fbDb.ref('users/'+fbUser.uid+'/data').get();
-      if(snap.exists()){ data = snap.val(); applyMigrationsAndDefaults(); }
-      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
-    } else if(typeof window.storage !== 'undefined'){
-      const r = await window.storage.get(STORAGE_KEY, false);
-      if(r && r.value){ data = JSON.parse(r.value); applyMigrationsAndDefaults(); }
-      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
-    } else {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
-      else { data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c})); data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a})); await save(); }
-    }
-  }catch(e){
-    loadError = e;
-    console.error('load failed, trying local backup mirror', e);
-    // don't touch `data` with fresh defaults here — try the local safety-net mirror first
-    // (save() always writes one, even when Firebase/window.storage is the primary store)
+    await readPrimaryStore();
+  }catch(e1){
+    // The very first read right after sign-in/page-load can race the auth token or db
+    // connection and fail even though everything is actually fine — retry once after a
+    // short pause before treating it as a real outage. This was the main cause of the
+    // warning banner showing up even when the data had, in fact, loaded correctly on
+    // a subsequent attempt.
+    console.warn('first load attempt failed, retrying once', e1);
+    await new Promise(res=>setTimeout(res,700));
     try{
-      const raw = localStorage.getItem(STORAGE_KEY+'-mirror');
-      if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
-      else {
-        // truly nothing anywhere — this really is a first run, safe to init defaults
+      await readPrimaryStore();
+    }catch(e2){
+      loadError = e2;
+      console.error('load failed twice, falling back to local backup mirror', e2);
+      // don't touch `data` with fresh defaults here — try the local safety-net mirror
+      // first (save() always writes one, even when Firebase/window.storage is primary)
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY+'-mirror');
+        if(raw){ data = JSON.parse(raw); applyMigrationsAndDefaults(); }
+        else {
+          // truly nothing anywhere — this really is a first run, safe to init defaults
+          data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
+          data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
+        }
+      }catch(e3){
         data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
         data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
       }
-    }catch(e2){
-      data.categories = DEFAULT_CATS.map(c=>({id:uid(), ...c}));
-      data.assetItems = DEFAULT_ASSET_ITEMS.map(a=>({id:uid(), ...a}));
     }
   }
   render();
-  if(loadError){
-    const banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;background:var(--rust);color:#fff;font-size:12px;padding:10px 14px;text-align:center;z-index:100;';
-    banner.textContent = '⚠ 최신 데이터를 불러오지 못해 임시 저장본을 표시하고 있어요. 인터넷 연결을 확인하고 새로고침해주세요.';
-    document.body.appendChild(banner);
-  }
+  if(loadError) showLoadErrorBanner();
+  else hideLoadErrorBanner();
 }
 // Always mirrors the latest data into localStorage, even when Firebase/window.storage is
 // the primary store — this is the safety net load() falls back to if a read ever fails,
@@ -382,6 +431,7 @@ async function save(){
     } else {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
+    hideLoadErrorBanner(); // a successful write means the primary store is reachable again
     return true;
   }
   catch(e){
@@ -472,6 +522,113 @@ function weeklyBudgetFromDaily(c, wk, dayISOs){
   return dayISOs.reduce((s,d)=>s+dailyBudgetValue(d,c),0);
 }
 
+/* ---------- SPENDING ANALYSIS (donut chart + auto goal-check) ---------- */
+function weekEntriesFor(monISO){
+  const monD = new Date(monISO+'T00:00:00');
+  const sunD = new Date(monD); sunD.setDate(monD.getDate()+6);
+  return entriesInRange(isoDate(monD), isoDate(sunD));
+}
+function monthEntriesForKey(mk){
+  const [y,m] = mk.split('-').map(Number);
+  const d = new Date(y, m-1, 1);
+  const {start,end} = monthBounds(d);
+  return entriesInRange(start,end);
+}
+
+const DONUT_PALETTE = ['#FF6F91','#14B8A6','#FFA726','#8B5CF6','#4F8EF7','#FF6B6B','#34D399','#F472B6','#FBBF24','#60A5FA','#A78BFA','#F87171','#2DD4BF','#FB923C'];
+
+// a lightweight donut chart summarizing "어디에 얼마나 썼는지" for one period. Reused by
+// both the week and month views so the two stay visually/behaviorally consistent.
+// Full-width by design (returns "card full") — meant to sit alone as a wide horizontal
+// banner above the settlement table rather than squeezed into one grid cell, both so it
+// reads more easily and so it screenshots cleanly for community 가계부 인증 posts.
+function categoryDonutChart(rangeEntries, type, title){
+  const cats = data.categories.filter(c=>c.type===type);
+  const rows = cats.map(c=>({
+    name: c.name,
+    value: rangeEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0)
+  })).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
+  const total = rows.reduce((s,x)=>s+x.value,0);
+  if(total<=0){
+    return `<div class="card full">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">${title}</h3>
+      <div style="text-align:center;padding:20px 10px;color:var(--ink-soft);font-size:12px;">아직 기록이 없어요</div>
+    </div>`;
+  }
+  const size=168, r=66, thickness=22;
+  const circumference = 2*Math.PI*r;
+  let offset = 0;
+  const segs = rows.map((row,i)=>{
+    const frac = row.value/total;
+    const len = frac*circumference;
+    const seg = `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${DONUT_PALETTE[i%DONUT_PALETTE.length]}" stroke-width="${thickness}" stroke-dasharray="${len.toFixed(2)} ${(circumference-len).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${size/2} ${size/2})"/>`;
+    offset += len;
+    return seg;
+  }).join('');
+  const top = rows[0];
+  // a horizontally-flowing grid instead of a single vertical stack, so the legend
+  // spreads across the full width of the card rather than trailing off in a tall
+  // narrow column next to the chart
+  const legend = rows.map((row,i)=>{
+    const pct = Math.round(row.value/total*100);
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:11.5px;min-width:0;">
+      <span style="width:10px;height:10px;border-radius:50%;background:${DONUT_PALETTE[i%DONUT_PALETTE.length]};flex-shrink:0;display:inline-block;"></span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${row.name}</span>
+      <span style="color:var(--ink-soft);flex-shrink:0;">${pct}%</span>
+      <span style="font-weight:700;flex-shrink:0;min-width:72px;text-align:right;">${won(row.value)}</span>
+    </div>`;
+  }).join('');
+  return `
+    <div class="card full">
+      <h3 class="serif" style="margin:0 0 4px;font-size:14px;">${title}</h3>
+      <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;">가장 많이 쓴 곳은 <b style="color:var(--ink);">${top.name}</b> (${Math.round(top.value/total*100)}%, ${won(top.value)})이에요.</div>
+      <div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap;">
+        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0;">
+          ${segs}
+          <text x="${size/2}" y="${size/2-4}" text-anchor="middle" font-size="10.5" fill="var(--ink-soft)">총 지출</text>
+          <text x="${size/2}" y="${size/2+15}" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)" font-family="'Noto Serif KR',serif">${manwon(total)}</text>
+        </svg>
+        <div style="flex:1;min-width:280px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:7px 20px;">
+          ${legend}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// heuristic auto-judge for a written goal ("다음주/다음달 반영사항"): looks for a category
+// name mentioned in the text plus a clear direction keyword (줄이기/늘리기 계열), then
+// compares that category's actual spend this period against the period the goal was
+// written in. Returns null whenever it can't confidently tell (no category named, no
+// direction keyword, or both directions present) so the UI falls back to the existing
+// manual checkbox instead of guessing.
+const GOAL_DECREASE_KEYWORDS = ['줄이','줄여','아껴','아끼','절약','다이어트','그만','참기','참아','안 쓰','안쓰','제한','자제'];
+const GOAL_INCREASE_KEYWORDS = ['늘리','늘려','더 모으','더 저축','증액','더 넣','채우기','채워'];
+function analyzeGoalAchievement(goalText, curEntries, prevEntries){
+  if(!goalText || !goalText.trim()) return null;
+  const hasDecrease = GOAL_DECREASE_KEYWORDS.some(k=>goalText.includes(k));
+  const hasIncrease = GOAL_INCREASE_KEYWORDS.some(k=>goalText.includes(k));
+  if(hasDecrease===hasIncrease) return null; // ambiguous (both or neither) — let the person decide
+  const matched = data.categories.filter(c=>c.name && goalText.includes(c.name));
+  if(matched.length===0) return null;
+  const direction = hasDecrease ? 'decrease' : 'increase';
+  const results = matched.map(c=>{
+    const prevAmt = prevEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+    const curAmt = curEntries.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0);
+    const achieved = direction==='decrease' ? curAmt<=prevAmt : curAmt>=prevAmt;
+    return {name:c.name, prevAmt, curAmt, achieved};
+  });
+  return {direction, results, achieved: results.every(r=>r.achieved)};
+}
+function goalAutoHintHtml(analysis){
+  if(!analysis) return '';
+  const dirLabel = analysis.direction==='decrease' ? '줄이기' : '늘리기';
+  const lines = analysis.results.map(r=>`${r.name} ${won(r.prevAmt)} → ${won(r.curAmt)}`).join(' · ');
+  return `<div style="font-size:11px;background:${analysis.achieved?'var(--green-soft)':'var(--rust-soft)'};color:${analysis.achieved?'var(--green)':'var(--rust)'};border-radius:6px;padding:6px 9px;margin:2px 0 8px;">
+    🤖 자동 분석 (${dirLabel} 목표) — ${lines} · ${analysis.achieved?'목표를 달성한 것 같아요!':'아직 목표에는 못 미쳤어요'}
+  </div>`;
+}
+
 function render(){
   const app = document.getElementById('app');
   const overdue = data.entries.length>0 && daysSinceLastBackup() >= 30;
@@ -550,6 +707,9 @@ function weekView(){
   const prevWk = prevWeekKey(mon);
   const prevFb = data.feedback[prevWk];
   const hasPrevGoal = prevFb && prevFb.next && prevFb.next.trim().length>0;
+  const wkStartEarly=isoDate(mon), wkEndEarly=isoDate(sun);
+  const goalAnalysis = hasPrevGoal ? analyzeGoalAchievement(prevFb.next, entriesInRange(wkStartEarly, wkEndEarly), weekEntriesFor(prevWk)) : null;
+  const goalChecked = prevFb && prevFb.nextAchieved!=null ? prevFb.nextAchieved : (goalAnalysis ? goalAnalysis.achieved : false);
 
   const days = [];
   for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); days.push(d); }
@@ -572,8 +732,11 @@ function weekView(){
       const ev = findEventById(e.eventId);
       return `<div class="entry">
         <span class="cat ${cls}">${c?c.name:'?'}</span>${ev?` <span class="cat" style="background:var(--brand-soft);color:var(--brand);">${escapeHtml(ev.name)}</span>`:''}<br>
-        <span>${e.item||''}</span> <span class="amt">${won(e.amount)}</span>
-        <button class="del" data-eid="${e.id}">삭제</button>
+        <span>${e.item||''}</span> <span class="amt edit-amt" data-eid="${e.id}" title="눌러서 수정">${won(e.amount)}</span>
+        <div class="actions">
+          <button class="edit" data-eid="${e.id}">수정</button>
+          <button class="del" data-eid="${e.id}">삭제</button>
+        </div>
       </div>`;
     }).join('');
     const dayBudgets = data.dailyCategoryBudgets[diso] || {};
@@ -617,7 +780,7 @@ function weekView(){
       const pct = weeklyBudget>0 ? Math.min(100, Math.round(spent/weeklyBudget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="wk-budget-input" data-cid="${c.id}" value="${weeklyBudget}" style="width:70px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="number" class="wk-budget-input" data-cid="${c.id}" value="${weeklyBudget}" style="width:98px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
       </tr>
@@ -659,8 +822,9 @@ function weekView(){
     <div class="card full" style="border-left:4px solid var(--brand);">
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:4px;">지난주에 적어둔 다음주 반영사항</div>
       <div style="font-size:13px;margin-bottom:8px;">${prevFb.next}</div>
+      ${goalAutoHintHtml(goalAnalysis)}
       <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;">
-        <input type="checkbox" class="goal-check-week" data-wk="${prevWk}" ${prevFb.nextAchieved?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
+        <input type="checkbox" class="goal-check-week" data-wk="${prevWk}" ${goalChecked?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
         이 목표를 달성했어요
       </label>
     </div>` : ''}
@@ -674,6 +838,7 @@ function weekView(){
     </div>
     <div class="daysrow full">${daysHtml}</div>
 
+    ${categoryDonutChart(rangeEntries, 'expense', '이번 주 지출 분석')}
     <div class="card wk-card-budget">
       <h3 class="serif" style="margin:0 0 4px;font-size:14px;">이번 주 변동지출 예산 대비</h3>
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:8px;">위 요일 카드에서 넣은 예산이 자동으로 합산돼요. 아직 안 넣었다면 기존 기본값이 표시돼요.</div>
@@ -722,7 +887,7 @@ function bindTabEvents(){
   if(nextWk) nextWk.onclick = ()=>{ refDate.setDate(refDate.getDate()+7); render(); };
 
   document.querySelectorAll('.addbtn').forEach(b=>{
-    b.onclick = ()=> openAddModal(b.dataset.date);
+    b.onclick = ()=> openEntryModal(b.dataset.date);
   });
   document.querySelectorAll('.addbudgetbtn').forEach(b=>{
     b.onclick = ()=> openAddBudgetModal(b.dataset.date);
@@ -735,10 +900,20 @@ function bindTabEvents(){
     };
   });
   document.querySelectorAll('.fixedpay').forEach(b=>{
-    b.onclick = ()=> openAddModal(isoDate(new Date()), b.dataset.cid);
+    b.onclick = ()=> openEntryModal(isoDate(new Date()), {presetCatId:b.dataset.cid});
+  });
+  // typos happen (a stray zero turns 백만원 into 십만원) — every recorded entry can now
+  // be corrected in place instead of only delete-and-re-add. Clicking the amount itself
+  // is a shortcut straight into edit mode too.
+  document.querySelectorAll('.entry .edit').forEach(b=>{
+    b.onclick = ()=> openEntryModal(null, {entry: data.entries.find(e=>e.id===b.dataset.eid)});
+  });
+  document.querySelectorAll('.entry .edit-amt').forEach(el=>{
+    el.onclick = ()=> openEntryModal(null, {entry: data.entries.find(e=>e.id===el.dataset.eid)});
   });
   document.querySelectorAll('.entry .del').forEach(b=>{
     b.onclick = async ()=>{
+      if(!confirm('이 기록을 삭제할까요?')) return;
       data.entries = data.entries.filter(e=>e.id!==b.dataset.eid);
       await save(); render();
     };
@@ -889,10 +1064,14 @@ function bindTabEvents(){
   const searchInput = document.getElementById('searchInput');
   const searchCat = document.getElementById('searchCat');
   if(searchInput){
-    const doSearch = ()=>{ document.getElementById('searchResults').innerHTML = renderSearchResults(searchInput.value, searchCat.value); };
+    const doSearch = ()=>{
+      document.getElementById('searchResults').innerHTML = renderSearchResults(searchInput.value, searchCat.value);
+      bindSearchEditButtons();
+    };
     searchInput.oninput = doSearch;
     searchCat.onchange = doSearch;
   }
+  bindSearchEditButtons();
 
   // roadmap sub-tab switch
   document.querySelectorAll('.rtabbtn').forEach(b=>{
@@ -983,6 +1162,13 @@ function bindTabEvents(){
   });
 
   // long roadmap
+  const lrStartYear = document.getElementById('lr-startyear');
+  if(lrStartYear) lrStartYear.onchange = async ()=>{
+    ensureLongRoadmap();
+    const v = parseInt(lrStartYear.value);
+    if(!isNaN(v)) setRoadmapStartYear(v);
+    await save(); render();
+  };
   const lrStart = document.getElementById('lr-start');
   if(lrStart) lrStart.onchange = async ()=>{
     ensureLongRoadmap();
@@ -1147,7 +1333,7 @@ function monthView(){
       const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:76px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':''}${won(Math.abs(diff))}</td>
       </tr>
@@ -1166,6 +1352,8 @@ function monthView(){
   const pmkFeedback = prevMonthKey(monthRef);
   const prevMfb = data.monthFeedback && data.monthFeedback[pmkFeedback];
   const hasPrevMonthGoal = prevMfb && prevMfb.next && prevMfb.next.trim().length>0;
+  const monthGoalAnalysis = hasPrevMonthGoal ? analyzeGoalAchievement(prevMfb.next, rangeEntries, monthEntriesForKey(pmkFeedback)) : null;
+  const monthGoalChecked = prevMfb && prevMfb.nextAchieved!=null ? prevMfb.nextAchieved : (monthGoalAnalysis ? monthGoalAnalysis.achieved : false);
 
   function inflowRowsForMonth(list){
     return list.map(c=>{
@@ -1175,7 +1363,7 @@ function monthView(){
       const pct = budget>0 ? Math.min(100, Math.round(spent/budget*100)) : (spent>0?100:0);
       return `<tr>
         <td>${c.name}</td>
-        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:76px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
+        <td class="num"><input type="number" class="month-budget-input" data-cid="${c.id}" value="${budget}" style="width:104px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-family:inherit;font-size:12px;"></td>
         <td class="num">${won(spent)}</td>
         <td class="num ${diff<0?'diff-over':'diff-under'}">${diff<0?'-':'+'}${won(Math.abs(diff))}</td>
       </tr>
@@ -1193,8 +1381,9 @@ function monthView(){
     <div class="card full" style="border-left:4px solid var(--brand);">
       <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:4px;">지난달에 적어둔 다음달 반영사항</div>
       <div style="font-size:13px;margin-bottom:8px;">${prevMfb.next}</div>
+      ${goalAutoHintHtml(monthGoalAnalysis)}
       <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;">
-        <input type="checkbox" class="goal-check-month" data-mk="${pmkFeedback}" ${prevMfb.nextAchieved?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
+        <input type="checkbox" class="goal-check-month" data-mk="${pmkFeedback}" ${monthGoalChecked?'checked':''} style="width:16px;height:16px;accent-color:var(--brand);">
         이 목표를 달성했어요
       </label>
     </div>` : ''}
@@ -1212,6 +1401,7 @@ function monthView(){
       <div style="font-size:11px;color:var(--ink-soft);">순잔액 (수입-지출-저축)</div>
       <div style="font-size:20px;font-weight:700;font-family:'Noto Serif KR',serif;color:${net>=0?'var(--green)':'var(--rust)'};">${net>=0?'+':'-'}${won(Math.abs(net))}</div>
     </div>
+    ${categoryDonutChart(rangeEntries, 'expense', '이번달 지출 분석')}
     <div class="card">
       <div class="grouplabel">수입</div>
       <div style="font-size:10px;color:var(--ink-soft);margin:-2px 0 4px;">월예산 칸을 누르면 이 달에만 적용되는 값으로 바로 고칠 수 있어요</div>
@@ -1274,7 +1464,7 @@ function nextMonthBudgetSection(mk){
         <span class="tag ${tagClass(c)}">${tagLabel(c)}</span>
         <span class="nm">${c.name}</span>
         <span style="font-size:10.5px;color:var(--ink-soft);width:76px;text-align:right;">이번달 ${won(curEffective(c))}</span>
-        <input type="number" class="next-month-budget-input" data-cid="${c.id}" value="${nextVal(c)}" style="width:88px;">
+        <input type="number" class="next-month-budget-input" data-cid="${c.id}" value="${nextVal(c)}" style="width:104px;">
       </div>`).join('');
   }
   const groups = [
@@ -1363,17 +1553,17 @@ function annualPlanView(){
       <table class="budget">
         <tr><th>구분</th>${monthHeads}<th>합계</th></tr>
         <tr style="background:var(--gold-soft);"><td>이벤트메모</td>${eventCells}<td></td></tr>
-        <tr><td>수입 계획</td>${incP.cells}<td class="num" style="font-weight:700;">${won(incP.total)}</td></tr>
-        <tr style="background:#FBF8F1;"><td>수입 실제</td>${incA.cells}<td class="num" style="font-weight:700;color:var(--gold);">${won(incA.total)}</td></tr>
-        <tr><td>지출 계획</td>${expP.cells}<td class="num" style="font-weight:700;">${won(expP.total)}</td></tr>
-        <tr style="background:#FBF8F1;"><td>지출 실제</td>${expA.cells}<td class="num" style="font-weight:700;color:var(--rust);">${won(expA.total)}</td></tr>
-        <tr><td>저축 계획</td>${savP.cells}<td class="num" style="font-weight:700;">${won(savP.total)}</td></tr>
-        <tr style="background:#FBF8F1;"><td>저축 실제</td>${savA.cells}<td class="num" style="font-weight:700;color:var(--green);">${won(savA.total)}</td></tr>
+        <tr><td>수입 계획</td>${incP.cells}<td class="num" style="font-weight:700;white-space:nowrap;" title="${won(incP.total)}">${bigWon(incP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>수입 실제</td>${incA.cells}<td class="num" style="font-weight:700;color:var(--gold);white-space:nowrap;" title="${won(incA.total)}">${bigWon(incA.total)}</td></tr>
+        <tr><td>지출 계획</td>${expP.cells}<td class="num" style="font-weight:700;white-space:nowrap;" title="${won(expP.total)}">${bigWon(expP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>지출 실제</td>${expA.cells}<td class="num" style="font-weight:700;color:var(--rust);white-space:nowrap;" title="${won(expA.total)}">${bigWon(expA.total)}</td></tr>
+        <tr><td>저축 계획</td>${savP.cells}<td class="num" style="font-weight:700;white-space:nowrap;" title="${won(savP.total)}">${bigWon(savP.total)}</td></tr>
+        <tr style="background:#FBF8F1;"><td>저축 실제</td>${savA.cells}<td class="num" style="font-weight:700;color:var(--green);white-space:nowrap;" title="${won(savA.total)}">${bigWon(savA.total)}</td></tr>
       </table>
     </div>
     <div class="summary-grid" style="grid-template-columns:1fr 1fr;">
-      <div class="box"><div class="lbl">연간 순잔액(계획)</div><div class="val">${netPlan>=0?'+':'-'}${won(Math.abs(netPlan))}</div></div>
-      <div class="box"><div class="lbl">연간 순잔액(실제)</div><div class="val" style="color:${netActual>=0?'var(--green)':'var(--rust)'}">${netActual>=0?'+':'-'}${won(Math.abs(netActual))}</div></div>
+      <div class="box"><div class="lbl">연간 순잔액(계획)</div><div class="val">${netPlan>=0?'+':'-'}${bigWon(Math.abs(netPlan))}</div></div>
+      <div class="box"><div class="lbl">연간 순잔액(실제)</div><div class="val" style="color:${netActual>=0?'var(--green)':'var(--rust)'}">${netActual>=0?'+':'-'}${bigWon(Math.abs(netActual))}</div></div>
     </div>
     ${eventDashboard(year)}
   `;
@@ -1536,53 +1726,108 @@ function lrIconLegend(){
   return `<div class="ly-icon-legend">${items}</div>`;
 }
 
+const LONG_ROADMAP_WINDOW = 40;
+
+function blankRoadmapYear(y){
+  return {id:uid(), year:y, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''};
+}
+
 function ensureLongRoadmap(){
   if(!data.longRoadmap){
     data.longRoadmap = {
       startingAsset: 0,
       birthYear: null,
       windowStartYear: null,
+      lastSyncedRealYear: null, // tracks real-world time separately from windowStartYear,
+                                 // so a manual "시작연도" override doesn't get stomped by
+                                 // the automatic yearly rollover on the next render
       years: []
     };
   }
+  if(data.longRoadmap.lastSyncedRealYear===undefined) data.longRoadmap.lastSyncedRealYear = null;
   if(syncLongRoadmapWindow()) save();
 }
 
-// keeps the long-term roadmap anchored to "this year": drops rows for years that
-// have already passed, rolls the starting-asset figure forward so the projection
-// stays continuous, and tops the table back up to a full 40-year span.
+// keeps the long-term roadmap moving forward with real time: whenever the real calendar
+// year advances since we last checked, shift windowStartYear by the same amount (not
+// snap it to "today" directly) — that way a manually-chosen start year (see
+// setRoadmapStartYear) keeps its own offset instead of being overwritten back to the
+// real current year on every render. Also tops the table back up to a full 40-year span.
 function syncLongRoadmapWindow(){
   const lr = data.longRoadmap;
-  const nowYear = new Date().getFullYear();
-  const WINDOW = 40;
+  const nowRealYear = new Date().getFullYear();
   let changed = false;
 
-  if(lr.windowStartYear !== nowYear){
-    if(lr.years.some(y=>y.year < nowYear)){
+  if(lr.windowStartYear==null){
+    lr.windowStartYear = nowRealYear;
+    lr.lastSyncedRealYear = nowRealYear;
+    changed = true;
+  } else if(lr.lastSyncedRealYear==null){
+    // migrating from an older version that always pinned windowStartYear to today
+    lr.lastSyncedRealYear = nowRealYear;
+  } else if(nowRealYear !== lr.lastSyncedRealYear){
+    changed = shiftRoadmapWindow(nowRealYear - lr.lastSyncedRealYear) || changed;
+    lr.lastSyncedRealYear = nowRealYear;
+  }
+
+  changed = fillRoadmapWindow() || changed;
+  return changed;
+}
+
+// advances (or, in theory, rewinds) the window by `delta` years as real time passes,
+// dropping rows that fall before the new start and carrying the starting-asset figure
+// forward through them so the projection stays continuous.
+function shiftRoadmapWindow(delta){
+  if(!delta) return false;
+  const lr = data.longRoadmap;
+  if(delta>0){
+    const newStartYear = lr.windowStartYear + delta;
+    if(lr.years.some(y=>y.year < newStartYear)){
       const oldRows = computeLongRoadmapRows();
-      const newFirst = oldRows.find(r=>r.year===nowYear);
+      const newFirst = oldRows.find(r=>r.year===newStartYear);
       if(newFirst){
         lr.startingAsset = Math.round(newFirst.beginAsset);
       } else {
-        const pastRows = oldRows.filter(r=>r.year<nowYear).sort((a,b)=>b.year-a.year);
+        const pastRows = oldRows.filter(r=>r.year<newStartYear).sort((a,b)=>b.year-a.year);
         if(pastRows[0]) lr.startingAsset = Math.round(pastRows[0].afterReturn);
       }
     }
-    lr.years = lr.years.filter(y=>y.year >= nowYear);
-    lr.windowStartYear = nowYear;
-    changed = true;
+    lr.years = lr.years.filter(y=>y.year >= newStartYear);
   }
+  lr.windowStartYear += delta;
+  return true;
+}
 
+// tops the years array back up to LONG_ROADMAP_WINDOW rows starting at windowStartYear.
+function fillRoadmapWindow(){
+  const lr = data.longRoadmap;
+  let changed = false;
   lr.years.sort((a,b)=>a.year-b.year);
   const existingYears = new Set(lr.years.map(y=>y.year));
-  for(let y=nowYear; y<nowYear+WINDOW; y++){
+  for(let y=lr.windowStartYear; y<lr.windowStartYear+LONG_ROADMAP_WINDOW; y++){
     if(!existingYears.has(y)){
-      lr.years.push({id:uid(), year:y, age:'', lifeEvent:'', withdrawal:0, savings:0, returnPct:10, realEstate:0, lifePlan:'', growthPlan:'', icon:''});
+      lr.years.push(blankRoadmapYear(y));
       changed = true;
     }
   }
   if(changed) lr.years.sort((a,b)=>a.year-b.year);
   return changed;
+}
+
+// manual override for the "시작연도" field: relabels all existing rows to start at
+// newStartYear, keeping each row's underlying data attached to its position in the
+// sequence (not to its old calendar year) — so changing 2026→2027 shifts every year in
+// the table forward by one, exactly like the user asked for, without touching any of
+// the numbers already entered. Doesn't touch lastSyncedRealYear, so automatic real-time
+// advancement continues to apply on top of this new offset going forward.
+function setRoadmapStartYear(newStartYear){
+  const lr = data.longRoadmap;
+  if(!newStartYear || !isFinite(newStartYear) || newStartYear===lr.windowStartYear) return false;
+  lr.years.sort((a,b)=>a.year-b.year);
+  lr.years.forEach((y,i)=>{ y.year = newStartYear + i; });
+  lr.windowStartYear = newStartYear;
+  fillRoadmapWindow();
+  return true;
 }
 
 function computeLongRoadmapRows(){
@@ -1688,11 +1933,13 @@ function longRoadmapView(){
       return textRow('age','나이/메모','39세');
     }
     function numRow(field, label){
-      const cells = chunkRows.map(r=>`<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${r[field]||0}" style="width:86px;"></td>`).join('');
+      const cells = chunkRows.map(r=>`<td class="num"><input type="number" class="ly-input" data-id="${r.id}" data-field="${field}" value="${r[field]||0}" style="width:118px;"></td>`).join('');
       return `<tr><td>${label}</td>${cells}</tr>`;
     }
     function computedRow(label, key, color){
-      const cells = chunkRows.map(r=>`<td class="num" style="font-weight:700;color:var(--${color});white-space:nowrap;">${won(Math.round(r[key]))}</td>`).join('');
+      // bigWon (억/만 단위) keeps this readable no matter how large the compounded total
+      // gets over 40 years, instead of a long string of digits getting visually clipped
+      const cells = chunkRows.map(r=>`<td class="num" style="font-weight:700;color:var(--${color});white-space:nowrap;" title="${won(Math.round(r[key]))}">${bigWon(r[key])}</td>`).join('');
       return `<tr><td>${label}</td>${cells}</tr>`;
     }
     const rangeLabel = chunkRows.length>1 ? `${chunkRows[0].year} ~ ${chunkRows[chunkRows.length-1].year}` : `${chunkRows[0].year}`;
@@ -1720,8 +1967,10 @@ function longRoadmapView(){
 
   return `
     <div class="card">
-      <div class="yfield"><label>시작 투자자산</label><input type="number" id="lr-start" value="${lr.startingAsset||0}"></div>
-      <div style="font-size:10.5px;color:var(--ink-soft);">${nowYear}년(올해) 시작 자산이에요. 매년 자동으로 계산된 값이 다음 해로 이어져요.</div>
+      <div class="yfield"><label>시작연도</label><input type="number" id="lr-startyear" value="${lr.windowStartYear||nowYear}"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">표의 첫 해를 직접 정할 수 있어요. 여기를 바꾸면 이미 입력한 숫자는 그대로 두고 40년 전체 연도만 그만큼 밀려요 (예: 2026→2027로 바꾸면 다음 해는 자동으로 2028). 그 뒤로는 실제 날짜가 흐르는 만큼 계속 한 해씩 자동으로 더 밀려요.</div>
+      <div class="yfield" style="margin-top:8px;"><label>시작 투자자산</label><input type="number" id="lr-start" value="${lr.startingAsset||0}"></div>
+      <div style="font-size:10.5px;color:var(--ink-soft);">${lr.windowStartYear||nowYear}년(첫 해) 시작 자산이에요. 매년 자동으로 계산된 값이 다음 해로 이어져요.</div>
       <div class="yfield" style="margin-top:8px;"><label>출생연도</label><input type="number" id="lr-birthyear" value="${lr.birthYear||''}" placeholder="예: 1988"></div>
       <div style="font-size:10.5px;color:var(--ink-soft);">출생연도를 넣으면 아래 표의 나이가 연도에 맞춰 자동으로 계산돼요.</div>
       <div class="grouplabel" style="margin-top:12px;">연도별 상징 아이콘</div>
@@ -1729,7 +1978,7 @@ function longRoadmapView(){
       ${lrIconLegend()}
     </div>
     ${longRoadmapGrowthChart(rows)}
-    <div style="font-size:11px;color:var(--ink-soft);margin:4px 2px 0;">${nowYear}년부터 ${nowYear+39}년까지 40년치가 자동으로 채워져 있어요. 해가 바뀌면 표가 자동으로 한 해씩 밀려서 항상 올해부터 40년 뒤까지 보여줘요.</div>
+    <div style="font-size:11px;color:var(--ink-soft);margin:4px 2px 0;">${lr.windowStartYear||nowYear}년부터 ${(lr.windowStartYear||nowYear)+LONG_ROADMAP_WINDOW-1}년까지 40년치가 채워져 있어요. 해가 바뀌면 표가 자동으로 한 해씩 밀려서 항상 같은 간격을 유지해요.</div>
     ${tables}
     <div style="display:flex;gap:6px;margin-top:12px;">
       <input type="number" id="bulkYearsCount" placeholder="예: 10" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
@@ -2117,8 +2366,19 @@ function renderSearchResults(keyword, catId){
   return `<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:6px;">${list.length}건 · 합계 ${won(total)}</div>` +
     list.map(e=>{
       const c = catById(e.categoryId);
-      return `<div class="result-item"><span>${c?c.name:'?'} ${e.item?('· '+e.item):''}</span><span><span class="dt">${e.date}</span> ${won(e.amount)}</span></div>`;
+      return `<div class="result-item">
+        <span>${c?c.name:'?'} ${e.item?('· '+e.item):''}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="dt">${e.date}</span> ${won(e.amount)}
+          <button class="search-edit" data-eid="${e.id}" style="background:none;border:1px solid var(--line);border-radius:4px;padding:2px 7px;font-size:10.5px;cursor:pointer;color:var(--ink-soft);">수정</button>
+        </span>
+      </div>`;
     }).join('');
+}
+function bindSearchEditButtons(){
+  document.querySelectorAll('.search-edit').forEach(b=>{
+    b.onclick = ()=> openEntryModal(null, {entry: data.entries.find(e=>e.id===b.dataset.eid)});
+  });
 }
 function searchView(){
   const opts = data.categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
@@ -2127,6 +2387,7 @@ function searchView(){
       <input id="searchInput" placeholder="품목 또는 카테고리로 검색">
       <select id="searchCat"><option value="">전체</option>${opts}</select>
     </div>
+    <div style="font-size:10.5px;color:var(--ink-soft);margin-bottom:6px;">금액을 잘못 입력했다면 각 항목의 "수정" 버튼으로 바로 고칠 수 있어요.</div>
     <div id="searchResults">${renderSearchResults('','')}</div>
   `;
 }
@@ -2187,36 +2448,60 @@ function catView(){
 }
 
 /* ---------- ADD ENTRY MODAL ---------- */
-function openAddModal(dateISO, presetCatId){
+// Handles both adding a new 정산 entry and editing an existing one, so a typo (e.g.
+// 백만원 mistyped as 십만원) can be fixed in place afterward instead of only being
+// deletable. Pass {entry: existingEntry} to edit; pass {presetCatId} to preselect a
+// category on a new entry (used by the 고정 항목 checklist's "기록" button).
+function openEntryModal(dateISO, opts){
+  opts = opts || {};
+  const existing = opts.entry || null;
+  const isEdit = !!existing;
+  const initialDate = isEdit ? existing.date : dateISO;
+  const presetCatId = opts.presetCatId || (isEdit ? existing.categoryId : null);
   const wrap = document.createElement('div');
   wrap.className = 'modal-bg';
   const catOpts = data.categories.map(c=>`<option value="${c.id}" ${c.id===presetCatId?'selected':''}>${c.name}</option>`).join('');
-  const year = dateISO.slice(0,4);
+  const year = initialDate.slice(0,4);
   const events = data.annualEvents[year] || [];
-  const eventOpts = `<option value="">이벤트 태그 없음</option>` + events.map(ev=>`<option value="${ev.id}">${escapeHtml(ev.name)}</option>`).join('');
+  const eventOpts = `<option value="">이벤트 태그 없음</option>` + events.map(ev=>`<option value="${ev.id}" ${isEdit && existing.eventId===ev.id?'selected':''}>${escapeHtml(ev.name)}</option>`).join('');
   wrap.innerHTML = `
     <div class="modal">
-      <h3 class="serif">${dateISO} 기록 추가</h3>
+      <h3 class="serif">${isEdit?'기록 수정':initialDate+' 기록 추가'}</h3>
+      <div class="row"><input type="date" id="m-date" value="${initialDate}"></div>
       <div class="row"><select id="m-cat">${catOpts}</select></div>
-      <div class="row"><input id="m-item" placeholder="품목 (예: 점심 김밥)"></div>
-      <div class="row"><input id="m-amt" type="number" placeholder="금액"></div>
+      <div class="row"><input id="m-item" placeholder="품목 (예: 점심 김밥)" value="${isEdit?escapeHtml(existing.item||''):''}"></div>
+      <div class="row"><input id="m-amt" type="number" placeholder="금액" value="${isEdit?existing.amount:''}"></div>
       <div class="row"><select id="m-event">${eventOpts}</select></div>
       <div class="actions">
+        ${isEdit?'<button class="cancel" id="m-delete" style="color:var(--rust);border-color:var(--rust);">삭제</button>':''}
         <button class="cancel" id="m-cancel">취소</button>
-        <button class="primary" id="m-save">저장</button>
+        <button class="primary" id="m-save">${isEdit?'수정 저장':'저장'}</button>
       </div>
     </div>
   `;
   document.body.appendChild(wrap);
   document.getElementById('m-cancel').onclick = ()=> wrap.remove();
   wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  const deleteBtn = document.getElementById('m-delete');
+  if(deleteBtn) deleteBtn.onclick = async ()=>{
+    if(!confirm('이 기록을 삭제할까요?')) return;
+    data.entries = data.entries.filter(e=>e.id!==existing.id);
+    await save();
+    wrap.remove();
+    render();
+  };
   document.getElementById('m-save').onclick = async ()=>{
+    const date = document.getElementById('m-date').value || initialDate;
     const categoryId = document.getElementById('m-cat').value;
     const item = document.getElementById('m-item').value.trim();
     const amount = parseInt(document.getElementById('m-amt').value)||0;
     const eventId = document.getElementById('m-event').value || null;
     if(amount<=0){ alert('금액을 입력해주세요'); return; }
-    data.entries.push({id:uid(), date:dateISO, categoryId, item, amount, eventId});
+    if(isEdit){
+      existing.date = date; existing.categoryId = categoryId; existing.item = item; existing.amount = amount; existing.eventId = eventId;
+    } else {
+      data.entries.push({id:uid(), date, categoryId, item, amount, eventId});
+    }
     await save();
     wrap.remove();
     render();
